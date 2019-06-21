@@ -11,10 +11,10 @@ except ImportError:
 
 isDebug=False
 
-def debug(str):
+def debug(debugMsg):
     if isDebug:
-        print(str)
-        
+        print(debugMsg)
+
 def sort_unique(sequence):
     import itertools
     import operator
@@ -53,18 +53,23 @@ def load_settings(name, path=None):
 
 
 class Api:
+    global isDebug
     def __init__(self, key=None):
+        global isDebug
         self._key = key
         self._base_url = 'https://rimuhosting.com'
-
         self._distros = []
 
         if not self._key:
             self._key = os.getenv('RIMUHOSTING_APIKEY', None)
+        settings = load_settings('.rimuhosting')
         if not self._key:
-            settings = load_settings('.rimuhosting')
             if settings:
                 self._key = settings.RIMUHOSTING_APIKEY
+                if hasattr(settings, "IS_DEBUG"):
+                    isDebug = settings.IS_DEBUG
+                    if isDebug:
+                        debug("Debug enabled per IS_DEBUG setting in settings file.")
 
     def __send_request(self, url, data=None, method='GET', isKeyRequired=True):
         if isKeyRequired and not self._key:

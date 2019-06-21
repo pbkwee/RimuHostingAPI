@@ -8,15 +8,10 @@ import rimuapi
 #from jsonpath_rw import jsonpath, parse
 import objectpath
 
-isDebug = False
-def debug(str):
-    if isDebug:
-        print(str)
-        print()     
 class Args(object):
     def __init__(self):
-        parser = argparse.ArgumentParser(description="Create a master Kubernetes VM.")
-        parser.add_argument("--server_json", type=str, required=False, help="Server json.  e.g. containing memory_mb and disk_space_gb.  per http://apidocs.rimuhosting.com/jaxbdocs/com/rimuhosting/rs/order/OSDPrepUtils.NewVPSRequest.html")
+        parser = argparse.ArgumentParser(description="Create a VM.")
+        parser.add_argument("--server_json", type=str, required=False, help="Server json config file.  e.g. containing memory_mb and disk_space_gb.  per http://apidocs.rimuhosting.com/jaxbdocs/com/rimuhosting/rs/order/OSDPrepUtils.NewVPSRequest.html")
         parser.add_argument("--cloud_config", type=str, required=False, help="CoreOS cloud config file.  Requires a 'distro' of coreos.64")
         parser.add_argument("--dc_location", type=str, required=False, help="Optional data center location.  e.g. DCDALLAS, DCFRANKFURT, DCAUCKLAND")
         parser.add_argument("--debug", action="store_true", help="Show debug logging")
@@ -27,23 +22,36 @@ class Args(object):
         parser.add_argument("--domain_name", type=str, required=False, help="Optional domain name to override server json")
         
         parser.parse_args(namespace=self)
-        isDebug = self.debug;
-    
-    def debug(self, str):
-        if isDebug or self.debug:
-            print(str)
-            print()     
+        if self.debug:
+            rimuapi.isDebug = self.debug;
             
+    
     def run(self):
         xx = rimuapi.Api()
         server_json = {}
         if args.server_json:
+            rimuapi.debug("loading server json from " + args.server_json)
             server_json = json.load(open(args.server_json))
-        self.debug("server json = " + str(server_json))
-        if not hasattr(server_json, "instantiation_options"):
+            rimuapi.debug("server_json loaded from file = " + str(server_json))
+            
+        rimuapi.debug("server json after load = " + str(server_json))
+        rimuapi.debug(" hasattr server_json 'instantiation_options' " + str(hasattr(server_json, "instantiation_options")))
+        rimuapi.debug(" in server_json 'instantiation_options' " + str("instantiation_options" in server_json))
+        rimuapi.debug(" in server_json 'non_existant' " + str("non_existant" in server_json))
+        #for i in server_json:
+        #    rimuapi.debug(" i = " + i)
+        #    for j in server_json[i]:
+        #        rimuapi.debug(" j = " + j)
+        if not "instantiation_options" in server_json:
+            rimuapi.debug("setting default instantiation_options")
             server_json["instantiation_options"] = dict()
-        if not hasattr(server_json, "vps_parameters"):
+        if not "vps_parameters" in server_json:
+            rimuapi.debug("setting default vps_parameters")
             server_json["vps_parameters"] = dict()
+        
+        rimuapi.debug("server_json = " + str(server_json))
+        rimuapi.debug("vps_parameters = " + str(server_json["vps_parameters"]))
+        rimuapi.debug("memory_mb = " + server_json["vps_parameters"]["memory_mb"])
             
         if self.cloud_config:
             server_json["instantiation_options"]["cloud_config_data"] = open(args.cloud_config).read()
@@ -51,7 +59,7 @@ class Args(object):
             server_json["dc_location"] = self.dc_location
         if self.domain_name:
             server_json["instantiation_options"]["domain_name"] = self.domain_name
-            self.debug("domain_name = " + self.domain_name)
+            rimuapi.debug("domain_name = " + self.domain_name)
         if self.memory_mb:
             server_json["vps_parameters"]["memory_mb"] = self.memory_mb
         if self.disk_space_gb:
@@ -69,17 +77,17 @@ class Args(object):
             if len(existing)>1:
                 raise Exception("Found multiple servers with this id.")
             
-            self.debug("Running a reinstall on " + str(existing[0]["order_oid"]) + " " + str(existing[0]))
+            rimuapi.debug("Running a reinstall on " + str(existing[0]["order_oid"]) + " " + str(existing[0]))
             
             vm = xx.reinstall(int(existing[0]["order_oid"]), server_json)
-            self.debug ("reinstalled master server")
+            rimuapi.debug ("reinstalled server")
             print(pformat(vm))
             return
-        
-        self.debug ("creating VM...")
+        raise Exception("debug stop")
+        rimuapi.debug ("creating VM...")
         print("server-json = ", pformat(server_json))
         vm = xx.create(server_json)
-        self.debug ("created VM: ")
+        rimuapi.debug ("created VM: ")
         print (pformat(vm))
                         
 if __name__ == '__main__':
