@@ -51,7 +51,6 @@ class Args(object):
         
         rimuapi.debug("server_json = " + str(server_json))
         rimuapi.debug("vps_parameters = " + str(server_json["vps_parameters"]))
-        rimuapi.debug("memory_mb = " + server_json["vps_parameters"]["memory_mb"])
             
         if self.cloud_config:
             server_json["instantiation_options"]["cloud_config_data"] = open(args.cloud_config).read()
@@ -67,6 +66,7 @@ class Args(object):
         if self.distro:
             server_json["instantiation_options"]["distro"] = self.distro
         #print("server_json=",server_json)
+        rimuapi.debug("memory_mb = " + server_json["vps_parameters"]["memory_mb"])
         
         # see if the cluster id is in the server json, else use the command line arg value
         # replace the magic $kubernetes_domain_name with the server domain name
@@ -81,14 +81,17 @@ class Args(object):
             
             vm = xx.reinstall(int(existing[0]["order_oid"]), server_json)
             rimuapi.debug ("reinstalled server")
-            print(pformat(vm))
+            print("order_oid:" + str(vm['post_new_vps_response']['about_order']['order_oid']))
+            print("primary_ip:" + str(vm['post_new_vps_response']['about_order']['allocated_ips']['primary_ip']))
             return
-        raise Exception("debug stop")
+        #raise Exception("debug stop")
         rimuapi.debug ("creating VM...")
-        print("server-json = ", pformat(server_json))
+        rimuapi.debug ("server-json = ", pformat(server_json))
         vm = xx.create(server_json)
         rimuapi.debug ("created VM: ")
         print (pformat(vm))
+        print("order_oid:" + str(vm['post_new_vps_response']['about_order']['order_oid']))
+        print("primary_ip:" + str(vm['post_new_vps_response']['about_order']['allocated_ips']['primary_ip']))
                         
 if __name__ == '__main__':
     args = Args();

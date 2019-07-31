@@ -1,5 +1,6 @@
 import urllib
 import os
+import sys
 from requests import Request, Session
 from warnings import catch_warnings
 from pprint import pformat
@@ -92,6 +93,10 @@ class Api:
                       )
         prepped = s.prepare_request(req)
         resp = s.send(prepped, timeout=3600)
+        #debug("__send_request_result:ok:"+str(resp.ok)+":")
+        debug("__send_request_response>>>")
+        debug(str(resp.text))
+        debug("__send_request_response<<<")
         if not resp.ok:
             message = resp.text
             try: 
@@ -148,7 +153,17 @@ class Api:
         uri = uri.replace('&', ';')
         r = self.__send_request(uri)
         data = r.json()
-        debug("order search uri of " + str(uri) + " returns " + str(data))
+        #debug("order search uri of " + str(uri) + " returns " + str(data))
+        #debug("about orders  " + str(data['get_orders_response']['about_orders']))
+        #debug("")
+        #debug("about orders 0" + str(data['get_orders_response']['about_orders'][0]))
+        #debug("")
+        #debug("order oid=" + str(data['get_orders_response']['about_orders'][0]['order_oid']))
+        #debug("")
+        #oids =""
+        #for i in data['get_orders_response']['about_orders']:
+        #   oids=oids+str(i['order_oid'])+","
+        #debug("order oids=" + oids)
         return data['get_orders_response']['about_orders']
 
     def _get_req(self, domain=None, kwargs={}):
@@ -275,6 +290,9 @@ class Api:
 
     def start(self, domain, order_oid):
         return self.change_state(domain, order_oid, 'RUNNING')
+
+    def stop(self, domain, order_oid):
+        return self.change_state(domain, order_oid, 'NOTRUNNING')
 
     # move VPS to another host
     def move(self, domain, order_oid,
