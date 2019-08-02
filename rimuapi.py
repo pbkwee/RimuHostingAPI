@@ -94,6 +94,7 @@ class Api:
         prepped = s.prepare_request(req)
         resp = s.send(prepped, timeout=3600)
         #debug("__send_request_result:ok:"+str(resp.ok)+":")
+        debug("__send_request_uri:"+str(url))
         debug("__send_request_response>>>")
         debug(str(resp.text))
         debug("__send_request_response<<<")
@@ -165,6 +166,13 @@ class Api:
         #   oids=oids+str(i['order_oid'])+","
         #debug("order oids=" + oids)
         return data['get_orders_response']['about_orders']
+
+    # list of orders/servers
+    def order(self, order_oid, domain_name="example.com"):
+        uri = '/r/orders/order-%s-%s/vps' %(order_oid, domain_name)
+        r = self.__send_request(uri)
+        data = r.json()
+        return data['get_order_response']['about_orders']
 
     def _get_req(self, domain=None, kwargs={}):
         _options, _params, _req = {}, {}, {}
