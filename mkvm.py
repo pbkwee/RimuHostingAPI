@@ -86,7 +86,7 @@ class Args(object):
             return
         #raise Exception("debug stop")
         rimuapi.debug ("creating VM...")
-        rimuapi.debug ("server-json = ", pformat(server_json))
+        rimuapi.debug ("server-json = " + pformat(server_json))
         vm = xx.create(server_json)
         rimuapi.debug ("created VM: ")
         print (pformat(vm))

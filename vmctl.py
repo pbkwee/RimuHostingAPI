@@ -10,7 +10,7 @@ class Args(object):
     def __init__(self):
         parser = argparse.ArgumentParser()
         parser.add_argument("--order_oid", type=int, required=True, help="order_oid to stop")
-        parser.add_argument('action', help='start, stop, or restart a VM', nargs='?', choices=('start', 'stop', 'restart'))
+        parser.add_argument('action', help='start, stop, or restart a VM', nargs='?', choices=('start', 'stop', 'restart', 'status'))
         #subparser = parser.add_mutually_exclusive_group(required=True)
         #subparser.add_argument('start', type=str, help='Start VM', default="start")
         #subparser.add_argument('stop', type=str, help='Stop VM', default="stop")
@@ -26,7 +26,7 @@ class Args(object):
 if __name__ == '__main__':
     args = Args()
     #print("args = " + args)
-    print("action = " + args.action)
+    rimuapi.debug("action = " + args.action)
     xx = rimuapi.Api()
     if args.action == 'start':
       resp = xx.start("na.com", args.order_oid)
@@ -34,4 +34,6 @@ if __name__ == '__main__':
       resp = xx.stop("na.com", args.order_oid)
     elif args.action == 'restart': 
       resp = xx.restart("na.com", args.order_oid)
+    elif args.action == 'status': 
+      resp = xx.status("na.com", args.order_oid)
     print(pformat(resp))
