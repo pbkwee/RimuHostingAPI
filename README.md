@@ -15,3 +15,15 @@ To install this particular version (which has a few changes used with https://gi
 ```
 python3 setup.py build install
 ```
+
+# Environment
+An API Key is required.  Get the API key from http://rimuhosting.com/cp/apikeys.jsp.  Then export RIMUHOSTING_APIKEY=xxxx (the digits only) or in ~/.rimuhosting file set:
+
+```
+RIMUHOSTING_APIKEY=xxxx
+```
+
+To enable debugging, in ~/.rimuhosting set:
+```
+IS_DEBUG=True
+```

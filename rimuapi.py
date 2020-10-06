@@ -48,7 +48,7 @@ def load_settings(name, path=None):
         bin_path = os.path.join(d, name)
         if os.path.exists(bin_path):
             f = open(os.path.abspath(bin_path))
-            settings = imp.load_source('settings', '', f)
+            settings = imp.load_source('settings', os.path.abspath(bin_path), f)
             f.close()
             return settings
     return None
