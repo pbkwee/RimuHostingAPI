@@ -45,7 +45,9 @@ if __name__ == '__main__':
     output["servers"]=[]
     for order in existing:
         output["servers"].append(args._getSimplifiedOrder(order))
-    
+    print("__simplified_orders_json>>>")
+    print(output)
+    print("__simplified_orders_json<<<")
     print(pformat(output))
 
 

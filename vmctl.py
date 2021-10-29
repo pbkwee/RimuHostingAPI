@@ -26,7 +26,7 @@ class Args(object):
 if __name__ == '__main__':
     args = Args()
     #print("args = " + args)
-    print("action = " + args.action)
+    rimuapi.debug("action = " + args.action)
     xx = rimuapi.Api()
     if args.action == 'start':
       resp = xx.start("na.com", args.order_oid)
