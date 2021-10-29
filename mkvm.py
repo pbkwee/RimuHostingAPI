@@ -73,7 +73,7 @@ class Args(object):
         if args.reinstall_order_oid:
             existing = xx.orders('N', {'server_type': 'VPS', 'order_oids': args.reinstall_order_oid})
             if len(existing)==0:
-                raise Exception("Could not find that server for a reinstall.  Just create a new VM?")
+                raise Exception("Could not find that server for a reinstall (" + str(args.reinstall_order_oid) + ").  Just create a new VM?")
             if len(existing)>1:
                 raise Exception("Found multiple servers with this id.")
             
