@@ -14,8 +14,8 @@ isDebug=False
 
 def debug(debugMsg):
     if isDebug:
-        #print(debugMsg, file=sys.stderr)
-        print(debugMsg)
+        print(debugMsg, file=sys.stderr)
+        #print(debugMsg)
         
 def sort_unique(sequence):
     import itertools
@@ -173,7 +173,7 @@ class Api:
         uri = '/r/orders/order-%s-%s/vps' %(order_oid, domain_name)
         r = self.__send_request(uri)
         data = r.json()
-        return data['get_order_response']['about_orders']
+        return data['get_vps_status_response']['running_vps_info']
 
     def _get_req(self, domain=None, kwargs={}):
         _options, _params, _req = {}, {}, {}
