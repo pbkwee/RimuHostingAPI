@@ -16,7 +16,7 @@ class Args(object):
         include_inactive.add_argument('--exclude_inactive', dest='include_inactive', action='store_false')
         parser.set_defaults(feature=True)
         parser.add_argument("--order_oid", type=int, help="order_oid to find")
-        parser.add_argument('--is_full_detail', help='Output full, vs. simplified order json', action='store_true')
+        parser.add_argument('--is_detailed', help='Output full, vs. simplified order json', action='store_true')
         parser.add_argument("--debug", action="store_true", help="Show debug logging")
 
         #parser.add_argument("--include-inactive", required=False, type=bool, default=True, help="include inactive VMs in the order list")
@@ -49,14 +49,13 @@ if __name__ == '__main__':
     
     # has a cluster id, is active, is master
     existing = xx.orders(args.include_inactive, order_filter_json)
-    output = {}
-    if args.is_full_detail:
-        output["servers"] = existing
-        print(pformat(output))
+    if args.is_detailed:
+        print(pformat(existing))
     else:
-        output["servers"]=[]
-        for order in existing:
-            output["servers"].append(args._getSimplifiedOrder(order))
+        output = {}
+        output["about_orders"]=[]
+        for order in existing["about_orders"]:
+            output["about_orders"].append(args._getSimplifiedOrder(order))
         #print("__simplified_orders_json>>>")
         #print(output)
         #print("__simplified_orders_json<<<")

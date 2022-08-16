@@ -10,7 +10,10 @@ class Args(object):
     def __init__(self):
         parser = argparse.ArgumentParser()
         parser.add_argument("--order_oid", type=int, help="order_oid to delete")
+        parser.add_argument("--debug", action="store_true", help="Show debug logging")
         parser.parse_args(namespace=self)
+        if self.debug:
+            rimuapi.isDebug = self.debug;
             
 if __name__ == '__main__':
     args = Args()

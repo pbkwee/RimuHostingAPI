@@ -120,33 +120,33 @@ class Api:
         return self._distros
 
     # list pricing plans & data centers
-    def plans(self):
+    def pricing(self):
         r = self.__send_request('/r/pricing-plans/new-vm-pricing', isKeyRequired=False)
         data = r.json()
-        self._plans = data['get_pricing_plans_response']['pricing_plan_infos']
+        self._plans = data['get_new_vm_pricing_response']['monthly_recurring_amt']
         return self._plans
 
-    def data_centers(self):
-        import itertools
-        try:
-            plans = self._plans
-        except AttributeError:
-            plans = self.plans()
-        dcs = []
-        lookup = {}
-        from pprint import pprint
-
-        for i in plans:
-            i = i['offered_at_data_center']
-            if not i: 
-                continue
-            code = i['data_center_location_code']
-            if not code:
-                continue
-            if not code in lookup:
-                lookup[code] = i;
-                dcs.append(i);
-        return dcs; 
+#     def data_centers(self):
+#         import itertools
+#         try:
+#             plans = self._plans
+#         except AttributeError:
+#             plans = self.plans()
+#         dcs = []
+#         lookup = {}
+#         from pprint import pprint
+# 
+#         for i in plans:
+#             i = i['offered_at_data_center']
+#             if not i: 
+#                 continue
+#             code = i['data_center_location_code']
+#             if not code:
+#                 continue
+#             if not code in lookup:
+#                 lookup[code] = i;
+#                 dcs.append(i);
+#         return dcs; 
 
     # list of orders/servers
     def orders(self, include_inactive='N', filter={}):
@@ -166,14 +166,9 @@ class Api:
         #for i in data['get_orders_response']['about_orders']:
         #   oids=oids+str(i['order_oid'])+","
         #debug("order oids=" + oids)
-        return data['get_orders_response']['about_orders']
-
-    # list of orders/servers
-    def order(self, order_oid, domain_name="example.com"):
-        uri = '/r/orders/order-%s-%s/vps' %(order_oid, domain_name)
-        r = self.__send_request(uri)
-        data = r.json()
-        return data['get_vps_status_response']['running_vps_info']
+        output = {}
+        output['about_orders'] = data['get_orders_response']['about_orders']
+        return output
 
     def _get_req(self, domain=None, kwargs={}):
         _options, _params, _req = {}, {}, {}
@@ -251,12 +246,21 @@ class Api:
     def status(self, domain, order_oid):
         r = self.__send_request('/r/orders/order-%s-%s/vps' % (order_oid, domain))
         data = r.json()
-        return data['get_vps_status_response']['running_vps_info']
+        output = {}
+        output["running_vps_info"] = data['get_vps_status_response']['running_vps_info']
+        if "about_order" in data['get_vps_status_response']:
+            output["about_order"] = data['get_vps_status_response']['about_order']
+        return output
+        #return data['get_vps_status_response']['running_vps_info']
+        
+        return data
 
     def info(self, domain, order_oid):
         r = self.__send_request('/r/orders/order-%s-%s' % (order_oid, domain))
         data = r.json()
-        return data['get_order_response']['about_order']
+        output = {}
+        output['about_order'] = data['get_order_response']['about_order'] 
+        return output
 
     def _get_order_oid(self, domain=None, ip=None, orders=None):
         oids = []
