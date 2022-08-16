@@ -14,8 +14,9 @@ isDebug=False
 
 def debug(debugMsg):
     if isDebug:
-        print(debugMsg)
-
+        print(debugMsg, file=sys.stderr)
+        #print(debugMsg)
+        
 def sort_unique(sequence):
     import itertools
     import operator
@@ -120,7 +121,7 @@ class Api:
 
     # list pricing plans & data centers
     def plans(self):
-        r = self.__send_request('/r/pricing-plans', isKeyRequired=False)
+        r = self.__send_request('/r/pricing-plans/new-vm-pricing', isKeyRequired=False)
         data = r.json()
         self._plans = data['get_pricing_plans_response']['pricing_plan_infos']
         return self._plans
@@ -172,7 +173,7 @@ class Api:
         uri = '/r/orders/order-%s-%s/vps' %(order_oid, domain_name)
         r = self.__send_request(uri)
         data = r.json()
-        return data['get_order_response']['about_orders']
+        return data['get_vps_status_response']['running_vps_info']
 
     def _get_req(self, domain=None, kwargs={}):
         _options, _params, _req = {}, {}, {}
