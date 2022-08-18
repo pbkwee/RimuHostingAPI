@@ -10,7 +10,7 @@ class Args(object):
     def __init__(self):
         parser = argparse.ArgumentParser()
         parser.add_argument("--order_oid", type=int, required=True, help="order_oid to stop")
-        parser.add_argument('action', help='start, stop, or restart a VM', nargs='?', choices=('start', 'stop', 'restart', 'status'))
+        parser.add_argument('action', help='start, stop, or restart a VM', nargs='?', choices=('start', 'stop', 'restart', 'status', 'info'))
         #subparser = parser.add_mutually_exclusive_group(required=True)
         #subparser.add_argument('start', type=str, help='Start VM', default="start")
         #subparser.add_argument('stop', type=str, help='Stop VM', default="stop")
@@ -36,4 +36,6 @@ if __name__ == '__main__':
       resp = xx.restart("na.com", args.order_oid)
     elif args.action == 'status': 
       resp = xx.status("na.com", args.order_oid)
+    elif args.action == 'info': 
+      resp = xx.info("na.com", args.order_oid)
     print(pformat(resp))
