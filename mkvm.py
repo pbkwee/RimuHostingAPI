@@ -14,14 +14,14 @@ class Args(object):
         parser.add_argument("--server_json", type=str, required=False, help="Server json config file.  e.g. containing memory_mb and disk_space_gb.  per http://apidocs.rimuhosting.com/jaxbdocs/com/rimuhosting/rs/order/OSDPrepUtils.NewVPSRequest.html")
         parser.add_argument("--cloud_config", type=str, required=False, help="CoreOS cloud config file.  Requires a 'distro' of coreos.64")
         parser.add_argument("--dc_location", type=str, required=False, help="Optional data center location.  e.g. DCDALLAS, DCFRANKFURT, DCAUCKLAND")
-        parser.add_argument("--debug", action="store_true", help="Show debug logging")
         parser.add_argument("--reinstall_order_oid", type=int, help="Reinstall the specified VM")
         parser.add_argument("--memory_mb", type=int, required=False, help="Optional memory size (MB) to override server json")
         parser.add_argument("--disk_space_gb", type=int, required=False, help="Optional disk size (GB) to override server json")
         parser.add_argument("--distro", type=str, required=False, help="Optional distro type to override server json")
         parser.add_argument("--domain_name", type=str, required=False, help="Optional domain name to override server json")
-        
+        rimuapi._addOutputArgument(parser)
         parser.parse_args(namespace=self)
+        
         if self.debug:
             rimuapi.isDebug = self.debug;
             

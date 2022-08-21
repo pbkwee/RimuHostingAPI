@@ -16,28 +16,16 @@ class Args(object):
         include_inactive.add_argument('--exclude_inactive', dest='include_inactive', action='store_false')
         parser.set_defaults(feature=True)
         parser.add_argument("--order_oid", type=int, help="order_oid to find")
-        parser.add_argument('--output', help='format of output', nargs='?', default='short', choices=('short', 'full'))
-        parser.add_argument("--debug", action="store_true", help="Show debug logging")
+        parser.add_argument("--search", help="text to find to find")
+        rimuapi._addOutputArgument(parser)
 
         #parser.add_argument("--include-inactive", required=False, type=bool, default=True, help="include inactive VMs in the order list")
         
         parser.parse_args(namespace=self)
+        
         if self.debug:
           rimuapi.isDebug = self.debug;
         
-    def _getSimplifiedOrder(self, order):
-        details = objectpath.Tree(order) 
-        ip = details.execute("$.allocated_ips.primary_ip")
-        #print(pformat(order))
-        summary = {"order_oid" : order["order_oid"]
-                   , "primary_ip" : "" if ip is None else ip
-                   , "domain_name" : order["domain_name"]
-                   , "dc_location" : order["location"]["data_center_location_code"]
-                   , "running_state" : order["running_state"]
-                   , "memory_mb" : details.execute("$.vps_parameters.memory_mb")
-                   , "order_description" : details.execute("$.order_description") }
-        return summary
-    
 
 if __name__ == '__main__':
     args = Args();
@@ -45,19 +33,24 @@ if __name__ == '__main__':
     order_filter_json = {'server_type': 'VPS'}
     if args.order_oid:
           order_filter_json["order_oid"] = args.order_oid
+    if args.search:
+          order_filter_json["search"] = args.search
           #xx.order(args.order_oid)
     
     # has a cluster id, is active, is master
-    existing = xx.orders(args.include_inactive, order_filter_json)
-    output = {}
-    if "full" == args.output:
-        output["servers"] = existing
-        print(pformat(output))
-    else:
-        output["servers"]=[]
-        for order in existing:
-            output["servers"].append(args._getSimplifiedOrder(order))
-        #print("__simplified_orders_json>>>")
-        #print(output)
-        #print("__simplified_orders_json<<<")
-        print(pformat(output))
+    existing = xx.orders(args.include_inactive, order_filter_json, args)
+    print(existing)
+    if False:
+        output = {}
+        if "full" == args.output:
+            output["servers"] = existing
+            print(pformat(output))
+        else:
+            output = {}
+            output["about_orders"]=[]
+            for order in existing["about_orders"]:
+                output["about_orders"].append(rimuapi._getSimplifiedOrder(order))
+            #print("__simplified_orders_json>>>")
+            #print(output)
+            #print("__simplified_orders_json<<<")
+            print(pformat(output))

@@ -9,10 +9,15 @@ import rimuapi
 class Args(object):
     def __init__(self):
         parser = argparse.ArgumentParser()
+        rimuapi._addOutputArgument(parser)
+        
         parser.parse_args(namespace=self)
+        
+        if self.debug:
+          rimuapi.isDebug = self.debug;
             
 if __name__ == '__main__':
     args = Args()
     xx = rimuapi.Api()
-    resp = xx.data_centers()
-    print(pformat(resp))
+    resp = xx.pricing(args)
+    print(resp)

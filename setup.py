@@ -1,23 +1,23 @@
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
-__author__ = "Abdallah Deeb <abdallah@deeb.me>"
+__author__ = "Peter Bryant <p.misc2@rimuhosting.com>"
 import os
 from setuptools import setup
-NAME = "RimuAPI"
+NAME = "RimuHostingAPI"
 GITHUB_URL = "https://github.com/pbkwee/%s" % (NAME)
 DESCRIPTION = "Python interface to RimuHosting API"
 
-VERSION = "0.0.6"
+VERSION = "0.0.7"
 
-REQUIREMENTS = ['requests','objectpath','pytz' ]
+REQUIREMENTS = ['requests','objectpath','pytz', 'jsonpath_ng']
 
 setup(name=NAME,
               version=VERSION,
               download_url="%s/zipball/master" % GITHUB_URL,
               description=DESCRIPTION,
               install_requires=REQUIREMENTS,
-              author='Abdallah Deeb',
-              author_email='abdallah@deeb.me',
+              author='Peter Bryant',
+              author_email='p.misc2@rimuhosting.com',
               url=GITHUB_URL,
               license='GPLv3+',
               py_modules=['rimuapi'],
