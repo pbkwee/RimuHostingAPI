@@ -85,6 +85,16 @@ class Args(object):
                 raise Exception("Could not find that server for a reinstall (" + str(args.reinstall_order_oid) + ").  Just create a new VM?")
             if num_orders>1:
                 raise Exception("Found multiple servers with this id.")
+            # for a reinstall use the pre-existing order default values, vs. what is in the server_json file if the user
+            # is not overriding these on the command line
+            if not self.distro:
+                server_json["instantiation_options"]["distro"] = None
+            if not self.dc_location:
+                server_json["dc_location"] = None
+            if not self.memory_mb:
+                server_json["vps_parameters"]["memory_mb"] = None
+            if not self.disk_space_gb:
+                server_json["vps_parameters"]["disk_space_mb"] = None
             
             rimuapi.debug("Running a reinstall on " + str(existing['result']['about_orders'][0]["order_oid"]))
             if self.is_abort_early:

@@ -38,7 +38,7 @@ if __name__ == '__main__':
     elif args.action == 'stop': 
         resp = xx.stop("na.com", args.order_oid, args)
     elif args.action == 'restart': 
-        resp = xx.restart("na.com", args.order_oid, args)
+        resp = xx.reboot("na.com", args.order_oid, args)
     elif args.action == 'status': 
         resp = xx.status("na.com", args.order_oid, args)
     elif args.action == 'info': 
