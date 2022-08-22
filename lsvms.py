@@ -40,17 +40,3 @@ if __name__ == '__main__':
     # has a cluster id, is active, is master
     existing = xx.orders(args.include_inactive, order_filter_json, args)
     print(existing)
-    if False:
-        output = {}
-        if "full" == args.output:
-            output["servers"] = existing
-            print(pformat(output))
-        else:
-            output = {}
-            output["about_orders"]=[]
-            for order in existing["about_orders"]:
-                output["about_orders"].append(rimuapi._getSimplifiedOrder(order))
-            #print("__simplified_orders_json>>>")
-            #print(output)
-            #print("__simplified_orders_json<<<")
-            print(pformat(output))

@@ -194,14 +194,18 @@ class Api:
 
         #debug("output:detail:"+output.detail+":output:"+output.output+":is_pretty:"+str(output.is_pretty))
         resp = resp.json();
-        debug("output:" + " output.detail:" + str(output.detail) + " output.output: " + str(output.output)
-               + " json_root: " + str(json_root) + "json_keys: " + str(list(json_keys))  
+        debug("output:" + " detail:" + str(output.detail) + " output: " + str(output.output)
+               + " json_root: " + str(json_root) + " json_keys: " + str(list(json_keys))  
               + " jsonpath_query: " + str(jsonpath_query) )
         #debug("json root element for " + json_root + " " + str(resp[json_root]))
         #debug("json root element for json_root " + json_root + " json_keys " + str(json_keys))
         #debug("output0: setresponse to " + json_root + " exists? " + str(resp[json_root] is not None) + " output.detail " + output.detail)
         if output.detail != "full" and json_root is not None:
-            resp = resp[json_root]
+            if json_root in resp:
+                resp = resp[json_root]
+            else:
+                resp = {}
+                debug('no json_root in response for ' + json_root)
             debug("output: json_root node " + json_root + ("(no value found)" if resp is None else ""))
         
         if jsonpath_query is not None and output.detail == "minimal":
@@ -272,14 +276,20 @@ class Api:
                 if len(json_keys) == 1:
                     #debug("output2: setting response to " + json_keys[0])
                     t = {}
-                    t[json_keys[0]] = resp[json_keys[0]] 
+                    if json_keys[0] in resp:
+                        t[json_keys[0]] = resp[json_keys[0]]
+                    else:
+                        debug('warn: Could not find json_keys in the response ' + str(json_keys)) 
                     resp = t
                 else:
                     t={}
                     t['result'] = {}
                     for key in json_keys:
-                        #debug("output3:adding response from " + key)
-                        t['result'][key] = resp[key]
+                        if key in resp:
+                            #debug("output3:adding response from " + key)
+                            t['result'][key] = resp[key]
+                        else:
+                            debug('warn: Could not find json_key in the response for ' + str(key)) 
                     resp = t
 
         if output.output == "json":
@@ -340,7 +350,8 @@ class Api:
 
     # list pricing plans & data centers
     def pricing(self, output = None):
-        r = self.__send_request('/r/pricing-plans/new-vm-pricing', isKeyRequired=False, output = output, json_root = 'get_new_vm_pricing_response', json_keys = ['monthly_recurring_amt'])
+        r = self.__send_request('/r/pricing-plans/new-vm-pricing', isKeyRequired=False, output = output
+                                , json_root = 'get_new_vm_pricing_response', json_keys = ['monthly_recurring_amt', 'human_readable_message'])
         return r
 
 #     def data_centers(self):
@@ -371,7 +382,7 @@ class Api:
         uri = '/r/orders;%s' % urllib.parse.urlencode(filter)
         uri = uri.replace('&', ';')
         r = self.__send_request(uri, output = output, json_root='get_orders_response'
-                                , json_keys = ['about_orders']
+                                , json_keys = ['about_orders', 'human_readable_message']
                                 #, jsonpath_query='$.about_orders[*].(human_readable_message, order_oid, domain_name)')
                                 #, jsonpath_query='$..(human_readable_message, order_oid, domain_name)')
                                 #, jsonpath_query='$..(pings_ok, running_state, deployed_state, order_description, amt_usd, order_oid, domain_name, primary_ip, human_readable_message)'
@@ -441,14 +452,20 @@ class Api:
         _req = self._get_req(domain, kwargs)
         payload = {'new_order_request': _req}
         #print("dc_location=" + (_req["dc_location"] if "dc_location" in _req else ''))
-        r = self.__send_request('/r/orders/new-vps', data=payload, method='POST', output = output)
+        r = self.__send_request('/r/orders/new-vps', data=payload, method='POST', output = output
+                                , json_root='post_new_vps_response', json_keys = ['about_order', 'human_readable_message', 'running_vps_info']
+                                , jsonpath_query = self.simplified_order_json
+                                )
         return r
 
     def create(self, vmargs={}, output = None):
         _req = self._get_req(domain=None, kwargs=vmargs)
         payload = {'new_order_request': _req}
         #print("dc_location=" + (_req["dc_location"] if "dc_location" in _req else ''))
-        r = self.__send_request('/r/orders/new-vps', data=payload, method='POST', output = output)
+        r = self.__send_request('/r/orders/new-vps', data=payload, method='POST', output = output
+                                , json_root='post_new_vps_response', json_keys = ['about_order', 'human_readable_message', 'running_vps_info']
+                                , jsonpath_query = self.simplified_order_json
+                                )
         return r
 
     # reinstall server
@@ -456,20 +473,26 @@ class Api:
         _req = self._get_req(domain, kwargs)
         payload = {'new_order_request': _req}
         r = self.__send_request('/r/orders/order-%s-%s/vps/reinstall' % (order_oid, domain),
-                                data=payload, method='PUT', output=output)
+                                data=payload, method='PUT', output=output
+                                , json_root='post_new_vps_response', json_keys = ['about_order', 'human_readable_message', 'setup_messages', 'running_vps_info']
+                                , jsonpath_query = self.simplified_order_json
+                                )
         return r
 
     def reinstall(self, order_oid, vmargs={}, output = None):
         _req = self._get_req(domain=None, kwargs=vmargs)
         payload = {'new_order_request': _req}
         r = self.__send_request('/r/orders/order-%s-%s/vps/reinstall' % (order_oid, "na.com"),
-                                data=payload, method='PUT', output=output)
+                                data=payload, method='PUT', output=output
+                                , json_root='post_new_vps_response', json_keys = ['about_order', 'human_readable_message', 'running_vps_info']
+                                , jsonpath_query = self.simplified_order_json
+                                )
         return r
 
     # check status
     def status(self, domain, order_oid, output = None):
         r = self.__send_request('/r/orders/order-%s-%s/vps' % (order_oid, domain),  output = output
-                                , json_root='get_vps_status_response', json_keys = ['about_order', 'running_vps_info']
+                                , json_root='get_vps_status_response', json_keys = ['about_order', 'human_readable_message', 'running_vps_info']
                                 #, jsonpath_query = '$.get_vps_status_response..(pings_ok, running_state, deployed_state, order_description, amt_usd, order_oid, domain_name, primary_ip)')
                                 #, jsonpath_query = '$..(pings_ok, running_state, deployed_state, order_description, amt_usd, order_oid, domain_name, primary_ip, human_readable_message)'
                                 , jsonpath_query = self.simplified_order_json
@@ -488,7 +511,7 @@ class Api:
 
     def info(self, domain, order_oid, output = None):
         r = self.__send_request('/r/orders/order-%s-%s' % (order_oid, domain), output = output
-                                , json_root = 'get_order_response', json_keys = ['about_order']
+                                , json_root = 'get_order_response', json_keys = ['about_order', 'human_readable_message']
                                 #, jsonpath_query = '$.get_order_response.about_order.(order_oid, domain_name, allocated_ips.primary_ip)'
                                 #, jsonpath_query = '$..(order_oid, domain_name, distro, human_readable_message)'
                                 #, jsonpath_query = '$..(order_oid, domain_name, primary_ip, human_readable_message)'
@@ -521,7 +544,10 @@ class Api:
             raise Exception(418, 'Domain not valid')
         else:
             r = self.__send_request('/r/orders/order-%s-%s/vps' % (order_oid, domain),
-                                    method='DELETE', output=output)
+                                    method='DELETE', output=output
+                                    , json_root = 'delete_server_response', json_keys = ['about_order', 'human_readable_message', 'cancel_messages']
+                                    , jsonpath_query = self.simplified_order_json
+                                    )
             return r
 
     # change state of server
@@ -531,7 +557,8 @@ class Api:
             raise Exception(418, 'Domain not valid')
         r = self.__send_request('/r/orders/order-%s-%s/vps/running-state' % (order_oid, domain),
                                 data={'running_state_change_request': {'running_state': new_state}},
-                                method='PUT', output = output, json_root='put_running_state_response'
+                                method='PUT', output = output
+                                , json_root='put_running_state_response'
                                 , json_keys = ['about_order', 'human_readable_message', 'running_vps_info']
                                 , jsonpath_query = self.simplified_order_json
                                 )
@@ -564,5 +591,9 @@ class Api:
                                     'move_reason': move_reason,
                                     'pricing_change_option': pricing_change_option,
                                     'selected_host_server_oid': selected_host_server_oid}},
-                                method='PUT', output = output)
+                                method='PUT', output = output
+                                , json_root='put_host_server_move_response'
+                                , json_keys = ['about_order', 'human_readable_message', 'running_vps_info']
+                                , jsonpath_query = self.simplified_order_json
+                                )
         return r

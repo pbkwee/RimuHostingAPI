@@ -20,5 +20,5 @@ class Args(object):
 if __name__ == '__main__':
     args = Args()
     xx = rimuapi.Api()
-    resp = xx.delete("na.com", args.order_oid)
-    print(pformat(resp))
+    resp = xx.delete("na.com", args.order_oid, args)
+    print(resp)

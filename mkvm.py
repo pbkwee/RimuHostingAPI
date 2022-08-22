@@ -19,6 +19,8 @@ class Args(object):
         parser.add_argument("--disk_space_gb", type=int, required=False, help="Optional disk size (GB) to override server json")
         parser.add_argument("--distro", type=str, required=False, help="Optional distro type to override server json")
         parser.add_argument("--domain_name", type=str, required=False, help="Optional domain name to override server json")
+        parser.add_argument('--is_abort_early', dest='is_abort_early', default=False, action='store_true', help="Abort setup before it begins.")
+
         rimuapi._addOutputArgument(parser)
         parser.parse_args(namespace=self)
         
@@ -66,32 +68,43 @@ class Args(object):
         if self.distro:
             server_json["instantiation_options"]["distro"] = self.distro
         #print("server_json=",server_json)
-        rimuapi.debug("memory_mb = " + server_json["vps_parameters"]["memory_mb"])
+        rimuapi.debug("memory_mb = " + str(server_json["vps_parameters"]["memory_mb"] if 'vps_parameters' in server_json and 'memory_mb' in server_json['vps_parameters'] else None))
         
         # see if the cluster id is in the server json, else use the command line arg value
         # replace the magic $kubernetes_domain_name with the server domain name
         if args.reinstall_order_oid:
-            existing = xx.orders('N', {'server_type': 'VPS', 'order_oids': args.reinstall_order_oid})
-            if len(existing)==0:
+            output = {'output' : 'json', 'detail' : 'short'}
+            existing = xx.orders('N', {'server_type': 'VPS', 'include_inactive' : 'N', 'order_oids': args.reinstall_order_oid}, output=self)
+            existing = json.loads(existing)
+            #rimuapi.debug(' existing is None ' + str(existing is None) + " type(existing) " + str(type(existing)))
+            #rimuapi.debug(' existing has about_orders ' + str('about_orders' in existing) + " existing has result " + str('result' in existing))
+            #rimuapi.debug(' existing len(about_orders) type ' + str(len(existing['result']['about_orders'])))
+            num_orders = len(existing['result']['about_orders']) if 'result' in existing and 'about_orders' in existing['result'] and type(existing['result']['about_orders']) is list else None
+            #rimuapi.debug('len = ' + str(num_orders))
+            if num_orders==0:
                 raise Exception("Could not find that server for a reinstall (" + str(args.reinstall_order_oid) + ").  Just create a new VM?")
-            if len(existing)>1:
+            if num_orders>1:
                 raise Exception("Found multiple servers with this id.")
             
-            rimuapi.debug("Running a reinstall on " + str(existing[0]["order_oid"]) + " " + str(existing[0]))
-            
-            vm = xx.reinstall(int(existing[0]["order_oid"]), server_json)
+            rimuapi.debug("Running a reinstall on " + str(existing['result']['about_orders'][0]["order_oid"]))
+            if self.is_abort_early:
+                raise Exception("aborting early")
+            vm = xx.reinstall(args.reinstall_order_oid, server_json, output = args)
             rimuapi.debug ("reinstalled server")
-            print("order_oid:" + str(vm['post_new_vps_response']['about_order']['order_oid']))
-            print("primary_ip:" + str(vm['post_new_vps_response']['about_order']['allocated_ips']['primary_ip']))
-            return
+            #print("order_oid:" + str(vm['post_new_vps_response']['about_order']['order_oid']))
+            #print("primary_ip:" + str(vm['post_new_vps_response']['about_order']['allocated_ips']['primary_ip']))
+            print(vm)
         #raise Exception("debug stop")
         rimuapi.debug ("creating VM...")
         rimuapi.debug ("server-json = " + pformat(server_json))
-        vm = xx.create(server_json)
+        if self.is_abort_early:
+            raise Exception("aborting early")
+        vm = xx.create(server_json, output = args)
         rimuapi.debug ("created VM: ")
-        print (pformat(vm))
-        print("order_oid:" + str(vm['post_new_vps_response']['about_order']['order_oid']))
-        print("primary_ip:" + str(vm['post_new_vps_response']['about_order']['allocated_ips']['primary_ip']))
+        print(vm)
+        #print (pformat(vm))
+        #print("order_oid:" + str(vm['post_new_vps_response']['about_order']['order_oid']))
+        #print("primary_ip:" + str(vm['post_new_vps_response']['about_order']['allocated_ips']['primary_ip']))
                         
 if __name__ == '__main__':
     args = Args();
