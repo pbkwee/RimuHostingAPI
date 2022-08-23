@@ -30,6 +30,7 @@ class Args(object):
     
     def run(self):
         xx = rimuapi.Api()
+        #rimuapi.debug("debug = " + str(rimuapi.isDebug) + " output detail = " + self.detail +  " output detail = " + args.detail )
         server_json = {}
         if args.server_json:
             rimuapi.debug("loading server json from " + args.server_json)
@@ -73,8 +74,12 @@ class Args(object):
         # see if the cluster id is in the server json, else use the command line arg value
         # replace the magic $kubernetes_domain_name with the server domain name
         if args.reinstall_order_oid:
-            output = {'output' : 'json', 'detail' : 'short'}
-            existing = xx.orders('N', {'server_type': 'VPS', 'include_inactive' : 'N', 'order_oids': args.reinstall_order_oid}, output=self)
+            # output for this query can differ from the output reuqested from the command line
+            # we are not printing this output
+            api = rimuapi.Api()
+            api.output = 'json'
+            api.detail = 'short'
+            existing = xx.orders('N', {'server_type': 'VPS', 'include_inactive' : 'N', 'order_oids': args.reinstall_order_oid}, output=api)
             existing = json.loads(existing)
             #rimuapi.debug(' existing is None ' + str(existing is None) + " type(existing) " + str(type(existing)))
             #rimuapi.debug(' existing has about_orders ' + str('about_orders' in existing) + " existing has result " + str('result' in existing))
@@ -104,6 +109,8 @@ class Args(object):
             #print("order_oid:" + str(vm['post_new_vps_response']['about_order']['order_oid']))
             #print("primary_ip:" + str(vm['post_new_vps_response']['about_order']['allocated_ips']['primary_ip']))
             print(vm)
+            return
+        
         #raise Exception("debug stop")
         rimuapi.debug ("creating VM...")
         rimuapi.debug ("server-json = " + pformat(server_json))

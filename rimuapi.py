@@ -25,6 +25,7 @@ def _addOutputArgument(parser):
     parser.add_argument('--is_pretty', help='pretty format json', action="store_true", default=True)
     parser.add_argument('--is_ugly', help='leaves json formatting', dest='is_pretty', action="store_false")
     parser.add_argument('--jsonpath', help='only output these fields using an jsonpath query')
+    parser.add_argument('--is_disable_calls', help='throw an exception rather than making a call', action="store_true", default = False)
 
 def sort_unique(sequence):
     import itertools
@@ -111,6 +112,14 @@ def _getSimplifiedOrder(self, order):
 
 class Api:
     global isDebug
+    # Show debug logging
+    debug = False
+    output = 'json'
+    detail = 'short'
+    is_pretty = True
+    jsonpath = None
+    is_disable_calls = False
+    
     simplified_order_json = '$..(pings_ok, running_state, deployed_state, order_description, amt_usd, order_oid, domain_name, primary_ip, human_readable_message, data_center_location_code, data_center_location_name)'
 
     #output = "flat"
@@ -144,6 +153,15 @@ class Api:
             'Content-Type': 'application/json',
             'Accept': 'application/json'
         }
+        if not output:
+           output = self
+        if not output.detail:
+           output.detail = "short"
+        if not output.output:
+           output.output = "raw"
+        if not output.is_disable_calls:
+           output.is_disable_calls = False
+           
         if isKeyRequired:
             headers['Authorization']= "rimuhosting apikey=%s" % self._key
         
@@ -156,17 +174,23 @@ class Api:
                       data=data,
                       headers=headers
                       )
+        debug("__send_request_uri:"+str(url))
+        debug("__send_request_data:"+str(data))
+        if output.is_disable_calls:
+            # a fancy implementation could return some mocked up data
+            debug("disabling call and returning nothing.")
+            return None
+        debug("__send_request_response>>>")
         prepped = s.prepare_request(req)
         resp = s.send(prepped, timeout=3600)
         #debug("__send_request_result:ok:"+str(resp.ok)+":")
-        debug("__send_request_uri:"+str(url))
-        debug("__send_request_response>>>")
         debug(str(resp.text))
         debug("__send_request_response<<<")
 
         if not resp.ok:
             message = resp.text
             try: 
+                debug("error " + str(resp))
                 j2 = resp.json()
                 for val in j2:
                   if "error_info" in j2[val] and "human_readable_message" in j2[val]["error_info"]:
@@ -175,12 +199,7 @@ class Api:
             finally:
                 raise Exception(resp.status_code, resp.reason, message)
         
-        if not output:
-           output = self
-        if not output.detail:
-           output.detail = "short"
-        if not output.output:
-           output.output = "raw"
+
         #if not output.is_pretty:
         #   output.is_pretty = True
 
@@ -405,7 +424,7 @@ class Api:
         #output['about_orders'] = data['get_orders_response']['about_orders']
         #return output
 
-    def _get_req(self, domain=None, kwargs={}):
+    def _get_create_req(self, domain=None, kwargs={}, isReinstall = False):
         _options, _params, _req = {}, {}, {}
         _req = kwargs
         if not 'instantiation_options' in _req:
@@ -417,10 +436,13 @@ class Api:
         if domain:
             _options['domain_name'] = domain
         #print(pformat(_options))
-        if not 'domain_name' in _options:
-            raise Exception(418, 'Domain name not provided')
-        if not valid_domain_name(_options['domain_name']):
-            raise Exception(418, 'Domain not valid')
+        # optional on reinstall
+        if not isReinstall:
+            if not 'domain_name' in _options:
+                raise Exception(418, 'Domain name not provided')
+        if 'domain_name' in _options:
+            if not valid_domain_name(_options['domain_name']):
+                raise Exception(418, 'Domain not valid')
         if 'password' in kwargs:
             _options['password'] = kwargs['password']
         if 'distro' in kwargs:
@@ -449,7 +471,7 @@ class Api:
     
     # create server
     def create(self, domain, output = None, **kwargs):
-        _req = self._get_req(domain, kwargs)
+        _req = self._get_create_req(domain, kwargs)
         payload = {'new_order_request': _req}
         #print("dc_location=" + (_req["dc_location"] if "dc_location" in _req else ''))
         r = self.__send_request('/r/orders/new-vps', data=payload, method='POST', output = output
@@ -459,7 +481,7 @@ class Api:
         return r
 
     def create(self, vmargs={}, output = None):
-        _req = self._get_req(domain=None, kwargs=vmargs)
+        _req = self._get_create_req(domain=None, kwargs=vmargs)
         payload = {'new_order_request': _req}
         #print("dc_location=" + (_req["dc_location"] if "dc_location" in _req else ''))
         r = self.__send_request('/r/orders/new-vps', data=payload, method='POST', output = output
@@ -470,7 +492,7 @@ class Api:
 
     # reinstall server
     def reinstall(self, domain, order_oid, output = None, **kwargs):
-        _req = self._get_req(domain, kwargs)
+        _req = self._get_create_req(domain, kwargs, isReinstall=True)
         payload = {'new_order_request': _req}
         r = self.__send_request('/r/orders/order-%s-%s/vps/reinstall' % (order_oid, domain),
                                 data=payload, method='PUT', output=output
@@ -480,7 +502,7 @@ class Api:
         return r
 
     def reinstall(self, order_oid, vmargs={}, output = None):
-        _req = self._get_req(domain=None, kwargs=vmargs)
+        _req = self._get_create_req(domain=None, kwargs=vmargs, isReinstall=True)
         payload = {'new_order_request': _req}
         r = self.__send_request('/r/orders/order-%s-%s/vps/reinstall' % (order_oid, "na.com"),
                                 data=payload, method='PUT', output=output
