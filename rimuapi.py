@@ -190,14 +190,16 @@ class Api:
         if not resp.ok:
             message = resp.text
             try: 
-                debug("error " + str(resp))
+                #debug("error " + str(resp))
                 j2 = resp.json()
                 for val in j2:
-                  if "error_info" in j2[val] and "human_readable_message" in j2[val]["error_info"]:
-                      message = j2[val]["error_info"]["human_readable_message"]
-                  break
+                    if "error_info" in j2[val] and "human_readable_message" in j2[val]["error_info"]:
+                        message = j2[val]["error_info"]["human_readable_message"]
+                        raise Exception(message)
             finally:
-                raise Exception(resp.status_code, resp.reason, message)
+                # no-op, just throw the original message
+                True
+            raise Exception(resp.status_code, resp.reason, message)
         
 
         #if not output.is_pretty:
