@@ -9,7 +9,7 @@ import rimuapi
 import objectpath
 
 class Args(object):
-    def __init__(self):
+    def __init__(self, description="Create a VM."):
         parser = argparse.ArgumentParser(description="Create a VM.")
         parser.add_argument("--server_json", type=str, required=False, help="Server json config file.  e.g. containing memory_mb and disk_space_gb.  per http://apidocs.rimuhosting.com/jaxbdocs/com/rimuhosting/rs/order/OSDPrepUtils.NewVPSRequest.html")
         parser.add_argument("--cloud_config", type=str, required=False, help="CoreOS cloud config file.  Requires a 'distro' of coreos.64")
@@ -27,14 +27,11 @@ class Args(object):
         if self.debug:
             rimuapi.isDebug = self.debug;
             
-    
-    def run(self):
-        xx = rimuapi.Api()
-        #rimuapi.debug("debug = " + str(rimuapi.isDebug) + " output detail = " + self.detail +  " output detail = " + args.detail )
+    def processArgs(self):
         server_json = {}
-        if args.server_json:
-            rimuapi.debug("loading server json from " + args.server_json)
-            server_json = json.load(open(args.server_json))
+        if self.server_json:
+            rimuapi.debug("loading server json from " + self.server_json)
+            server_json = json.load(open(self.server_json))
             rimuapi.debug("server_json loaded from file = " + str(server_json))
             
         rimuapi.debug("server json after load = " + str(server_json))
@@ -56,7 +53,7 @@ class Args(object):
         rimuapi.debug("vps_parameters = " + str(server_json["vps_parameters"]))
             
         if self.cloud_config:
-            server_json["instantiation_options"]["cloud_config_data"] = open(args.cloud_config).read()
+            server_json["instantiation_options"]["cloud_config_data"] = open(self.cloud_config).read()
         if self.dc_location:
             server_json["dc_location"] = self.dc_location
         if self.domain_name:
@@ -73,13 +70,13 @@ class Args(object):
         
         # see if the cluster id is in the server json, else use the command line arg value
         # replace the magic $kubernetes_domain_name with the server domain name
-        if args.reinstall_order_oid:
+        if self.reinstall_order_oid:
             # output for this query can differ from the output reuqested from the command line
             # we are not printing this output
             api = rimuapi.Api()
             api.output = 'json'
             api.detail = 'short'
-            existing = xx.orders('N', {'server_type': 'VPS', 'include_inactive' : 'N', 'order_oids': args.reinstall_order_oid}, output=api)
+            existing = xx.orders('N', {'server_type': 'VPS', 'include_inactive' : 'N', 'order_oids': self.reinstall_order_oid}, output=api)
             existing = json.loads(existing)
             #rimuapi.debug(' existing is None ' + str(existing is None) + " type(existing) " + str(type(existing)))
             #rimuapi.debug(' existing has about_orders ' + str('about_orders' in existing) + " existing has result " + str('result' in existing))
@@ -87,11 +84,14 @@ class Args(object):
             num_orders = len(existing['result']['about_orders']) if 'result' in existing and 'about_orders' in existing['result'] and type(existing['result']['about_orders']) is list else None
             #rimuapi.debug('len = ' + str(num_orders))
             if num_orders==0:
-                raise Exception("Could not find that server for a reinstall (" + str(args.reinstall_order_oid) + ").  Just create a new VM?")
+                raise Exception("Could not find that server for a reinstall (" + str(self.reinstall_order_oid) + ").  Just create a new VM?")
+
             if num_orders>1:
                 raise Exception("Found multiple servers with this id.")
+            rimuapi.debug("Matching order: " + str(existing['result']['about_orders'][0]["order_oid"]))
             # for a reinstall use the pre-existing order default values, vs. what is in the server_json file if the user
             # is not overriding these on the command line
+
             if not self.distro:
                 server_json["instantiation_options"]["distro"] = None
             if not self.dc_location:
@@ -100,20 +100,27 @@ class Args(object):
                 server_json["vps_parameters"]["memory_mb"] = None
             if not self.disk_space_gb:
                 server_json["vps_parameters"]["disk_space_mb"] = None
-            
-            rimuapi.debug("Running a reinstall on " + str(existing['result']['about_orders'][0]["order_oid"]))
+
+        return server_json
+        #raise Exception("debug stop")
+        #rimuapi.debug ("creating VM...")
+        #rimuapi.debug ("server-json = " + pformat(server_json))
+        
+        
+    def run(self):
+        server_json = processArgs(this)
+        xx = rimuapi.Api()
+        if self.reinstall_order_oid:
             if self.is_abort_early:
                 raise Exception("aborting early")
-            vm = xx.reinstall(args.reinstall_order_oid, server_json, output = args)
+            vm = xx.reinstall(self.reinstall_order_oid, server_json, output = self.output)
             rimuapi.debug ("reinstalled server")
             #print("order_oid:" + str(vm['post_new_vps_response']['about_order']['order_oid']))
             #print("primary_ip:" + str(vm['post_new_vps_response']['about_order']['allocated_ips']['primary_ip']))
             print(vm)
             return
-        
-        #raise Exception("debug stop")
-        rimuapi.debug ("creating VM...")
-        rimuapi.debug ("server-json = " + pformat(server_json))
+
+        #rimuapi.debug("debug = " + str(rimuapi.isDebug) + " output detail = " + self.detail +  " output detail = " + args.detail )
         if self.is_abort_early:
             raise Exception("aborting early")
         vm = xx.create(server_json, output = args)

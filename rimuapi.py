@@ -369,6 +369,15 @@ class Api:
         r = self.__send_request('/r/distributions', isKeyRequired=False, output = output, json_root = 'get_distros_response', json_keys=['distro_infos'])
         return r
 
+    def pricing2(self, output = None, server_json = {}):
+        _req = self._get_create_req("notexample.com", server_json, isReinstall=False)
+        payload = {'new_order_request': _req}
+        r = self.__send_request('/r/pricing-plans/new-vm-pricing',
+                                data=payload, method='PUT', output=output
+                                , json_root='get_new_vm_pricing_response', json_keys = ['monthly_recurring_amt', 'human_readable_message']
+                                , jsonpath_query = self.simplified_order_json
+                                )
+        return r
     # list pricing plans & data centers
     def pricing(self, output = None):
         r = self.__send_request('/r/pricing-plans/new-vm-pricing', isKeyRequired=False, output = output
