@@ -38,5 +38,5 @@ if __name__ == '__main__':
           #xx.order(args.order_oid)
     
     # has a cluster id, is active, is master
-    existing = xx.orders(args.include_inactive, order_filter_json, args)
+    existing = xx.orders(args.include_inactive, order_filter_json, output = args)
     print(existing)

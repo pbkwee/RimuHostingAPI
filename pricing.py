@@ -20,8 +20,8 @@ if __name__ == '__main__':
     #args = Args()
     args = mkvm.Args(description="Get pricing information");
     xx = rimuapi.Api()
-    resp = xx.pricing(args)
-    print(resp)
+    #resp = xx.pricing(args)
+    #print(resp)
     server_json = args.processArgs()
-    resp = xx.pricing2(server_json = server_json)
+    resp = xx.pricing2(server_json = server_json, output = args)
     print(resp)

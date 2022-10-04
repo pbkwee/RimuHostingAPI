@@ -17,7 +17,9 @@ class Args(object):
         parser.add_argument("--reinstall_order_oid", type=int, help="Reinstall the specified VM")
         parser.add_argument("--memory_mb", type=int, required=False, help="Optional memory size (MB) to override server json")
         parser.add_argument("--disk_space_gb", type=int, required=False, help="Optional disk size (GB) to override server json")
+        parser.add_argument("--disk_space_2_gb", type=int, required=False, help="Optional disk (#2) size (GB) to override server json")
         parser.add_argument("--distro", type=str, required=False, help="Optional distro type to override server json")
+        parser.add_argument("--features", type=str, required=False, help="Optional space separated features like ssd, nvme, recentcpu")
         parser.add_argument("--domain_name", type=str, required=False, help="Optional domain name to override server json")
         parser.add_argument('--is_abort_early', dest='is_abort_early', default=False, action='store_true', help="Abort setup before it begins.")
 
@@ -28,6 +30,7 @@ class Args(object):
             rimuapi.isDebug = self.debug;
             
     def processArgs(self):
+        xx = rimuapi.Api()
         server_json = {}
         if self.server_json:
             rimuapi.debug("loading server json from " + self.server_json)
@@ -63,8 +66,12 @@ class Args(object):
             server_json["vps_parameters"]["memory_mb"] = self.memory_mb
         if self.disk_space_gb:
             server_json["vps_parameters"]["disk_space_mb"] = self.disk_space_gb*1024
+        if self.disk_space_2_gb:
+            server_json["vps_parameters"]["disk_space_2_mb"] = self.disk_space_2_gb*1024
         if self.distro:
             server_json["instantiation_options"]["distro"] = self.distro
+        if self.features:
+            server_json["features"] = self.features
         #print("server_json=",server_json)
         rimuapi.debug("memory_mb = " + str(server_json["vps_parameters"]["memory_mb"] if 'vps_parameters' in server_json and 'memory_mb' in server_json['vps_parameters'] else None))
         
@@ -108,12 +115,12 @@ class Args(object):
         
         
     def run(self):
-        server_json = processArgs(this)
+        server_json = self.processArgs()
         xx = rimuapi.Api()
         if self.reinstall_order_oid:
             if self.is_abort_early:
                 raise Exception("aborting early")
-            vm = xx.reinstall(self.reinstall_order_oid, server_json, output = self.output)
+            vm = xx.reinstall(self.reinstall_order_oid, server_json, output = self)
             rimuapi.debug ("reinstalled server")
             #print("order_oid:" + str(vm['post_new_vps_response']['about_order']['order_oid']))
             #print("primary_ip:" + str(vm['post_new_vps_response']['about_order']['allocated_ips']['primary_ip']))
@@ -123,7 +130,7 @@ class Args(object):
         #rimuapi.debug("debug = " + str(rimuapi.isDebug) + " output detail = " + self.detail +  " output detail = " + args.detail )
         if self.is_abort_early:
             raise Exception("aborting early")
-        vm = xx.create(server_json, output = args)
+        vm = xx.create(server_json, output = self)
         rimuapi.debug ("created VM: ")
         print(vm)
         #print (pformat(vm))

@@ -34,16 +34,16 @@ if __name__ == '__main__':
     rimuapi.debug("action = " + str(args.action))
     xx = rimuapi.Api()
     if args.action == 'start':
-        resp = xx.start("na.com", args.order_oid, args)
+        resp = xx.start("na.com", args.order_oid, output = args)
     elif args.action == 'stop': 
-        resp = xx.stop("na.com", args.order_oid, args)
+        resp = xx.stop("na.com", args.order_oid, output = args)
     elif args.action == 'restart': 
-        resp = xx.reboot("na.com", args.order_oid, args)
+        resp = xx.reboot("na.com", args.order_oid, output = args)
     elif args.action == 'status': 
-        resp = xx.status("na.com", args.order_oid, args)
+        resp = xx.status("na.com", args.order_oid, output = args)
     elif args.action == 'info': 
         #print ("pretty:"+str(args.is_pretty))
-        resp = xx.info("na.com", args.order_oid, args)
+        resp = xx.info("na.com", args.order_oid, output = args)
     else: 
         raise Exception("Unrecognized action.")
     print(resp)
