@@ -99,8 +99,9 @@ class Args(object):
             # for a reinstall use the pre-existing order default values, vs. what is in the server_json file if the user
             # is not overriding these on the command line
 
-            if not self.distro:
-                server_json["instantiation_options"]["distro"] = None
+            # reinstall will use json provided distro
+            #if not self.distro:
+            #    server_json["instantiation_options"]["distro"] = None
             if not self.dc_location:
                 server_json["dc_location"] = None
             if not self.memory_mb:
