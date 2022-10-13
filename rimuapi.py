@@ -5,7 +5,7 @@ import sys
 from requests import Request, Session
 from warnings import catch_warnings
 from pprint import pformat
-import objectpath
+#import objectpath
 import jsonpath_ng
 try:
     import json
@@ -94,20 +94,20 @@ def _flattenJSON(y):
     flatten(y)
     return out
 
-def _getSimplifiedOrder(self, order):
-    details = objectpath.Tree(order) 
-    ip = details.execute("$.allocated_ips.primary_ip")
-    #print(pformat(order))
-    
-    
-    summary = {"order_oid" : order["order_oid"]
-               , "primary_ip" : "" if ip is None else ip
-               , "domain_name" : order["domain_name"]
-               , "dc_location" : order["location"]["data_center_location_code"]
-               , "running_state" : order["running_state"]
-               , "memory_mb" : details.execute("$.vps_parameters.memory_mb")
-               , "order_description" : details.execute("$.order_description") }
-    return summary
+#def _getSimplifiedOrder(self, order):
+#    details = objectpath.Tree(order) 
+#    ip = details.execute("$.allocated_ips.primary_ip")
+#    #print(pformat(order))
+#    
+#    
+#    summary = {"order_oid" : order["order_oid"]
+#               , "primary_ip" : "" if ip is None else ip
+#               , "domain_name" : order["domain_name"]
+#               , "dc_location" : order["location"]["data_center_location_code"]
+#               , "running_state" : order["running_state"]
+#               , "memory_mb" : details.execute("$.vps_parameters.memory_mb")
+#               , "order_description" : details.execute("$.order_description") }
+#    return summary
 
 
 class Api:
