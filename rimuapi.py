@@ -109,6 +109,8 @@ def _flattenJSON(y):
 #               , "order_description" : details.execute("$.order_description") }
 #    return summary
 
+class HumanReadableException(Exception):
+    pass
 
 class Api:
     global isDebug
@@ -195,7 +197,7 @@ class Api:
                 for val in j2:
                     if "error_info" in j2[val] and "human_readable_message" in j2[val]["error_info"]:
                         message = j2[val]["error_info"]["human_readable_message"]
-                        raise Exception(message)
+                        raise HumanReadableException(message)
             finally:
                 # no-op, just throw the original message
                 True
