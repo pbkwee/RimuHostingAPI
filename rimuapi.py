@@ -132,18 +132,30 @@ class Api:
         global isDebug
         self._key = key
         self._base_url = 'https://rimuhosting.com'
-        self._distros = []
+        self._is_ssl_verify = True
+        
+        #self._distros = []
 
         if not self._key:
             self._key = os.getenv('RIMUHOSTING_APIKEY', None)
+        if not self._base_url:
+            self._base_url = os.getenv('RIMUHOSTING_BASEURL', None)
         settings = load_settings('.rimuhosting')
-        if not self._key:
-            if settings:
+        if settings:
+            if not self._key:
                 self._key = settings.RIMUHOSTING_APIKEY
-                if hasattr(settings, "IS_DEBUG"):
-                    isDebug = settings.IS_DEBUG
-                    if isDebug:
-                        debug("Debug enabled per IS_DEBUG setting in settings file.")
+            if hasattr(settings, "IS_DEBUG"):
+                isDebug = settings.IS_DEBUG
+                if isDebug:
+                    debug("Debug enabled per IS_DEBUG setting in .rimuhosting settings file.")
+            if hasattr(settings, "RIMUHOSTING_BASEURL"):
+                self._base_url = settings.RIMUHOSTING_BASEURL
+                if isDebug:
+                    debug("Base url set per RIMUHOSTING_BASEURL setting in .rimuhosting settings file to " + str(self._base_url))
+            if hasattr(settings, "RIMUHOSTING_ISVERIFYSSL"):
+                self._is_ssl_verify = settings.RIMUHOSTING_ISVERIFYSSL
+                if isDebug:
+                    debug("Verify SSL certificate per RIMUHOSTING_ISVERIFYSSL setting in .rimuhosting settings file to " + str(self._is_ssl_verify))
 
     def __send_request(self, url, data=None, method='GET', isKeyRequired=True, output = None
                        , json_root = None, json_keys = None
@@ -167,11 +179,14 @@ class Api:
         if isKeyRequired:
             headers['Authorization']= "rimuhosting apikey=%s" % self._key
         
-        url = urllib.parse.urljoin(self._base_url, url)
+        #url = urllib.parse.urljoin(self._base_url, url)
+        url = self._base_url+url
 
         data = data if isinstance(data, str) else json.dumps(data)
 
         s = Session()
+        #s.verify=self._is_ssl_verify
+
         req = Request(method, url,
                       data=data,
                       headers=headers
@@ -184,7 +199,7 @@ class Api:
             return None
         debug("__send_request_response>>>")
         prepped = s.prepare_request(req)
-        resp = s.send(prepped, timeout=3600)
+        resp = s.send(prepped, timeout=3600, verify=self._is_ssl_verify)
         #debug("__send_request_result:ok:"+str(resp.ok)+":")
         debug(str(resp.text))
         debug("__send_request_response<<<")

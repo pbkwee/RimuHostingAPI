@@ -10,7 +10,7 @@ import rimuapi
 
 class Args(object):
     def __init__(self, description="Create a VM."):
-        parser = argparse.ArgumentParser(description="Create a VM.")
+        parser = argparse.ArgumentParser(description=description)
         parser.add_argument("--server_json", type=str, required=False, help="Server json config file.  e.g. containing memory_mb and disk_space_gb.  per http://apidocs.rimuhosting.com/jaxbdocs/com/rimuhosting/rs/order/OSDPrepUtils.NewVPSRequest.html")
         parser.add_argument("--cloud_config", type=str, required=False, help="CoreOS cloud config file.  Requires a 'distro' of coreos.64")
         parser.add_argument("--dc_location", type=str, required=False, help="Optional data center location.  e.g. DCDALLAS, DCFRANKFURT, DCAUCKLAND")
