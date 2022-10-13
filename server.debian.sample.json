@@ -1,0 +1,11 @@
+{
+  "vps_parameters": {
+    "disk_space_mb": "8192",
+    "memory_mb": "4096"
+  },
+  "instantiation_options": {
+    "distro": "bullseye.64",
+    "domain_name": "example.com"
+  },
+  "is_ssd_host_required" : true
+}
