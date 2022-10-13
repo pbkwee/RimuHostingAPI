@@ -9,7 +9,8 @@ DESCRIPTION = "Python interface to RimuHosting API"
 
 VERSION = "0.0.7"
 
-REQUIREMENTS = ['requests','objectpath','pytz', 'jsonpath_ng']
+#REQUIREMENTS = ['requests','objectpath','pytz', 'jsonpath_ng']
+REQUIREMENTS = ['requests','jsonpath_ng']
 
 setup(name=NAME,
               version=VERSION,
