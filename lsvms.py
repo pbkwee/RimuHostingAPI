@@ -6,7 +6,7 @@ from pprint import pprint
 from pprint import pformat
 import rimuapi
 #from jsonpath_rw import jsonpath, parse
-import objectpath
+#import objectpath
 
 class Args(object):
     def __init__(self):
