@@ -102,7 +102,7 @@ Getting sample pricing:
 
 ```
 $ python pricing.py  --help
-usage: pricing.py [-h] [--server_json SERVER_JSON]
+usage: pricing.py [-h] [--server_json_file SERVER_JSON]
                   [--cloud_config CLOUD_CONFIG] [--dc_location DC_LOCATION]
                   [--reinstall_order_oid REINSTALL_ORDER_OID]
                   [--memory_mb MEMORY_MB] [--disk_space_gb DISK_SPACE_GB]
@@ -116,7 +116,7 @@ Get pricing information.
 
 optional arguments:
   -h, --help            show this help message and exit
-  --server_json SERVER_JSON
+  --server_json_file SERVER_JSON
                         Server json config file. e.g. containing memory_mb and
                         disk_space_gb. per http://apidocs.rimuhosting.com/jaxb
                         docs/com/rimuhosting/rs/order/OSDPrepUtils.NewVPSReque

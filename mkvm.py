@@ -11,7 +11,8 @@ import rimuapi
 class Args(object):
     def __init__(self, description="Create a VM."):
         parser = argparse.ArgumentParser(description=description)
-        parser.add_argument("--server_json", type=str, required=False, help="Server json config file.  e.g. containing memory_mb and disk_space_gb.  per http://apidocs.rimuhosting.com/jaxbdocs/com/rimuhosting/rs/order/OSDPrepUtils.NewVPSRequest.html")
+        parser.add_argument("--server_json_file", type=str, required=False, help="Server json config file.  e.g. containing memory_mb and disk_space_gb.  per http://apidocs.rimuhosting.com/jaxbdocs/com/rimuhosting/rs/order/OSDPrepUtils.NewVPSRequest.html")
+        parser.add_argument("--extra_server_json", type=str, required=False, help="Extra json passed through to create the vm.  e.g. '{\"host_server_selector\": { \"min_vm_disk_free_gb\" : 300 }}' per http://apidocs.rimuhosting.com/jaxbdocs/com/rimuhosting/rs/order/OSDPrepUtils.NewVPSRequest.html")
         parser.add_argument("--cloud_config", type=str, required=False, help="CoreOS cloud config file.  Requires a 'distro' of coreos.64")
         parser.add_argument("--dc_location", type=str, required=False, help="Optional data center location.  e.g. DCDALLAS, DCFRANKFURT, DCAUCKLAND")
         parser.add_argument("--reinstall_order_oid", type=int, help="Reinstall the specified VM")
@@ -32,12 +33,17 @@ class Args(object):
     def processArgs(self):
         xx = rimuapi.Api()
         server_json = {}
-        if self.server_json:
-            rimuapi.debug("loading server json from " + self.server_json)
-            server_json = json.load(open(self.server_json))
-            rimuapi.debug("server_json loaded from file = " + str(server_json))
+        if self.server_json_file:
+            rimuapi.debug("loading server json from " + self.server_json_file)
+            server_json = json.load(open(self.server_json_file))
+            rimuapi.debug("server_json loaded from file = " + str(self.server_json_file))
+            rimuapi.debug("server json after load = " + str(server_json))
+        if self.extra_server_json:
+            extra_server_dict = json.loads(self.extra_server_json)
+            server_json = { ** server_json, ** extra_server_dict }
+            rimuapi.debug("server json after extra_server_json = " + str(server_json))
+
             
-        rimuapi.debug("server json after load = " + str(server_json))
         rimuapi.debug(" hasattr server_json 'instantiation_options' " + str(hasattr(server_json, "instantiation_options")))
         rimuapi.debug(" in server_json 'instantiation_options' " + str("instantiation_options" in server_json))
         rimuapi.debug(" in server_json 'non_existant' " + str("non_existant" in server_json))
@@ -109,6 +115,7 @@ class Args(object):
             if not self.disk_space_gb:
                 server_json["vps_parameters"]["disk_space_mb"] = None
 
+        rimuapi.debug("final server json = " + str(server_json))
         return server_json
         #raise Exception("debug stop")
         #rimuapi.debug ("creating VM...")
