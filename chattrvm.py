@@ -27,11 +27,11 @@ class Args(object):
         if self.memory_mb:
             running_vps_data["memory_mb"] = self.memory_mb
         if self.disk_space_gb:
-            running_vps_data["disk_space_mb"] = self.disk_space_gb*1024
+            running_vps_data["disk_space_mb"] = self.disk_space_gb*1000
         if self.disk_space_2_gb:
-            running_vps_data["disk_space_2_mb"] = self.disk_space_2_gb*1024
+            running_vps_data["disk_space_2_mb"] = self.disk_space_2_gb*1000
         if self.disk_space_3_gb:
-            running_vps_data["disk_space_3_mb"] = self.disk_space_3_gb*1024
+            running_vps_data["disk_space_3_mb"] = self.disk_space_3_gb*1000
         rimuapi.debug("running_vps_data = " + str(running_vps_data))
         return running_vps_data
         

@@ -604,7 +604,7 @@ class Api:
     # change state of server
     # states: RUNNING | NOTRUNNING | RESTARTING | POWERCYCLING
     def change_state(self, domain, order_oid, new_state, output = None):
-        if not valid_domain_name(domain):
+        if domain is not None and not valid_domain_name(domain):
             raise Exception(418, 'Domain not valid')
         r = self.__send_request('/r/orders/order-%s-%s/vps/running-state' % (order_oid, domain),
                                 data={'running_state_change_request': {'running_state': new_state}},
@@ -618,7 +618,7 @@ class Api:
     # change state of server
     # {memory_mb : xxx, disk_space_mb : xxx , disk_space_2_mb : xxx}
     def change_resources(self, domain, order_oid, running_vps_data, output = None):
-        if not valid_domain_name(domain):
+        if domain is not None and not valid_domain_name(domain):
             raise Exception(418, 'Domain not valid')
         r = self.__send_request('/r/orders/order-%s-%s/vps/parameters' % (order_oid, domain),
                                 data={'running_vps_data': running_vps_data},
