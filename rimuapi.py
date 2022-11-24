@@ -614,6 +614,20 @@ class Api:
                                 )
         return r
 
+    # change state of server
+    # {memory_mb : xxx, disk_space_mb : xxx , disk_space_2_mb : xxx}
+    def change_resources(self, domain, order_oid, running_vps_data, output = None):
+        if not valid_domain_name(domain):
+            raise Exception(418, 'Domain not valid')
+        r = self.__send_request('/r/orders/order-%s-%s/vps/parameters' % (order_oid, domain),
+                                data={'running_vps_data': running_vps_data},
+                                method='PUT', output = output
+                                , json_root='put_running_vps_data_response'
+                                , json_keys = ['about_order', 'human_readable_message', 'resource_change_result']
+                                , jsonpath_query = self.simplified_order_json
+                                )
+        return r
+
     def reboot(self, domain, order_oid, output = None):
         return self.change_state(domain, order_oid, 'RESTARTING', output=output)
 
