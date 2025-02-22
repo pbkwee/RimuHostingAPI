@@ -165,7 +165,8 @@ class Api:
         if isKeyRequired and not self._key:
             raise Exception('API Key is required.  Get the API key from http://rimuhosting.com/cp/apikeys.jsp.  Then export RIMUHOSTING_APIKEY=xxxx (the digits only) or add RIMUHOSTING_APIKEY=xxxx to a ~/.rimuhosting file.')
         headers = {
-            'Content-Type': 'application/json',
+            #'Content-Type': 'application/json',
+            'Content-Type': 'application/x-www-form-urlencoded' if isinstance(data, str) else 'application/json',  
             'Accept': 'application/json'
         }
         if not output:
@@ -626,6 +627,29 @@ class Api:
                                 , json_root='put_running_vps_data_response'
                                 , json_keys = ['about_order', 'human_readable_message', 'resource_change_result']
                                 , jsonpath_query = self.simplified_order_json
+                                )
+        return r
+
+    # set the reverse dns/ptr dns record
+    # curl -H "Accept: application/json" -X PUT -d domain_name=example.com -H "Authorization: rimuhosting apikey=<secret>"  https://rimuhosting.com/r/orders/order-xxxxx-example.com/ptr;ip=127.0.0.1
+    def set_ptr(self, order_oid, domain, ip, domain_name, output = None):
+        if domain is not None and not valid_domain_name(domain):
+            raise Exception(418, 'Domain not valid')
+        if domain is None:
+          domain='example.com'
+        if ip is  None:
+          ip=''
+        urlencoded = urllib.parse.urlencode({'domain_name' : domain_name })
+        if isDebug:
+            debug("form parameters:")
+            debug(urlencoded)
+
+        r = self.__send_request('/r/orders/order-%s-%s/ptr;ip=%s' % (order_oid, domain, ip),
+                                data= urlencoded,
+                                method='PUT', output = output
+                                , json_root='jaxrs_response'
+                                , json_keys = ['human_readable_message']
+                                , jsonpath_query = '$'
                                 )
         return r
 
