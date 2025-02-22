@@ -9,7 +9,7 @@ import rimuapi
 class Args(object):
     def __init__(self, description="Create a VM."):
         parser = argparse.ArgumentParser(description=description)
-        parser.add_argument("--order_oid", type=int, help="Change this VM")
+        parser.add_argument("--order_oid", type=int, required=True, help="Change this VM")
         parser.add_argument("--memory_mb", type=int, required=False, help="Optional memory size (MB)")
         parser.add_argument("--disk_space_gb", type=int, required=False, help="Optional disk size (GB)")
         parser.add_argument("--disk_space_2_gb", type=int, required=False, help="Optional disk (#2) size (GB)")
