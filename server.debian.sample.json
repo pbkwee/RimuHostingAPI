@@ -4,7 +4,7 @@
     "memory_mb": "4096"
   },
   "instantiation_options": {
-    "distro": "bullseye.64",
+    "distro": "deb12.64",
     "domain_name": "example.com"
   },
   "is_ssd_host_required" : true
