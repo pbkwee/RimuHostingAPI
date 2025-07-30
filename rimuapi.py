@@ -201,7 +201,7 @@ class Api:
         debug("__send_request_response>>>")
         prepped = s.prepare_request(req)
         resp = s.send(prepped, timeout=3600, verify=self._is_ssl_verify)
-        #debug("__send_request_result:ok:"+str(resp.ok)+":")
+        debug("__send_request_result:ok:"+str(self._is_ssl_verify)+"/"+str(resp.ok)+":")
         debug(str(resp.text))
         debug("__send_request_response<<<")
 

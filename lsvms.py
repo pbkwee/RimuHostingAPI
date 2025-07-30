@@ -16,6 +16,7 @@ class Args(object):
         include_inactive.add_argument('--include_inactive', dest='include_inactive', action='store_true')
         include_inactive.add_argument('--exclude_inactive', dest='include_inactive', action='store_false')
         parser.set_defaults(feature=True)
+        parser.set_defaults(include_inactive=None)
         parser.add_argument("--order_oid", type=int, help="order_oid to find")
         parser.add_argument("--search", help="text to find to find")
         rimuapi._addOutputArgument(parser)
