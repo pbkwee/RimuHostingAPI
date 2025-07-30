@@ -7,7 +7,8 @@ from requests import Request, Session
 from warnings import catch_warnings
 from pprint import pformat
 #import objectpath
-import jsonpath_ng
+#import jsonpath_ng
+
 try:
     import json
 except ImportError:
