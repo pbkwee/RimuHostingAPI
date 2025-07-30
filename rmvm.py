@@ -10,7 +10,7 @@ import rimuapi
 class Args(object):
     def __init__(self):
         parser = argparse.ArgumentParser()
-        parser.add_argument("--order_oid", type=int, help="order_oid to delete")
+        parser.add_argument("--order_oid", type=int, required=True, help="order_oid to delete")
         rimuapi._addOutputArgument(parser)
         
         parser.parse_args(namespace=self)
