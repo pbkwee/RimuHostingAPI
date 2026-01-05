@@ -47,7 +47,8 @@ def valid_domain_name(domain_name):
 
 
 def load_settings(name, path=None):
-    import imp
+    import importlib.util
+    import importlib.machinery
 
     path = path or os.getenv('PATH')
     home_dir = os.path.expanduser('~')
@@ -56,9 +57,10 @@ def load_settings(name, path=None):
     for d in dirs:
         bin_path = os.path.join(d, name)
         if os.path.exists(bin_path):
-            f = open(os.path.abspath(bin_path))
-            settings = imp.load_source('settings', os.path.abspath(bin_path), f)
-            f.close()
+            fn = os.path.abspath(bin_path)
+            loader = importlib.machinery.SourceFileLoader("settings", fn)
+            spec = importlib.util.spec_from_file_location("settings", fn, loader=loader)
+            settings = importlib.util.module_from_spec(spec)
             return settings
     return None
 
