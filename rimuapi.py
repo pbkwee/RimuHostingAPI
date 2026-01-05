@@ -42,7 +42,7 @@ def valid_domain_name(domain_name):
     if len(domain_name) > 255:
         return False
     domain_name.rstrip('.')
-    allowed = re.compile("(?!-)[A-Z\d-]{1,63}(?<!-)$", re.IGNORECASE)
+    allowed = re.compile("(?!-)[A-Z0-9-]{1,63}(?<!-)$", re.IGNORECASE)
     return all(allowed.match(x) for x in domain_name.split("."))
 
 
@@ -61,6 +61,11 @@ def load_settings(name, path=None):
             loader = importlib.machinery.SourceFileLoader("settings", fn)
             spec = importlib.util.spec_from_file_location("settings", fn, loader=loader)
             settings = importlib.util.module_from_spec(spec)
+            # to save reloads
+            sys.modules[spec.name] = settings
+            # to avoid AttributeError: module 'settings' has no attribute 'RIMUHOSTING_APIKEY'
+            spec.loader.exec_module(settings)
+            debug("loaded settings from " + str(bin_path) + " got " + str(settings))
             return settings
     return None
 

@@ -7,9 +7,9 @@ NAME = "RimuHostingAPI"
 GITHUB_URL = "https://github.com/pbkwee/%s" % (NAME)
 DESCRIPTION = "Python interface to RimuHosting API"
 
-VERSION = "0.0.7"
+VERSION = "0.0.8"
 
-#REQUIREMENTS = ['requests','objectpath','pytz', 'jsonpath_ng']
+# apt-get install python3-jsonpath-n
 REQUIREMENTS = ['requests','jsonpath_ng']
 
 setup(name=NAME,
