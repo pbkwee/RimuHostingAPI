@@ -212,10 +212,15 @@ class Api:
         resp = s.send(prepped, timeout=3600, verify=self._is_ssl_verify)
         debug("__send_request_result:ok:"+str(self._is_ssl_verify)+"/"+str(resp.ok)+":")
         debug(str(resp.text))
-        debut("HTTP status:", resp.status_code)
-        debug("Content-Type:", resp.headers.get("content-type"))
-        debug("Response body:", repr(resp.text[:1000]))
+        debug("HTTP status:"+str( resp.status_code))
+        debug("Content-Type:"+str(resp.headers.get("content-type")))
+        debug("Response body:"+str(repr(resp.text[:1000])))
         debug("__send_request_response<<<")
+
+        content_type = (resp.headers.get("content-type") or "").lower()
+
+        if "application/json" not in content_type:
+            raise Exception("Expected an application/json response, got "+(resp.headers.get("content-type") or ""))
 
         if not resp.ok:
             message = resp.text
