@@ -63,22 +63,24 @@ for output in $OUTPUTS; do
   for detail in $DETAILS; do
     [ $ret -ne 0 ] && break
     echo "runtest: python lsvms.py --detail $detail --output $output"  
-    python lsvms.py --detail $detail --output $output
+    python lsvms.py --detail "$detail" --output "$output"
     lret=$?
     [ $lret -ne 0 ] && echo "failed." >&2
     ret=$((ret+$lret))
     [ $ret -ne 0 ] && break
-    [ ! -z "$ORDER_OID" ] && for vmctlcommand in 'start' 'status' 'info'; do
+    #codex:deprecated start now requires --is_disruptive.
+    # [ ! -z "$ORDER_OID" ] && for vmctlcommand in 'start' 'status' 'info'; do
+    [ -n "$ORDER_OID" ] && for vmctlcommand in 'status' 'info'; do
       echo "runtest: python vmctl.py $vmctlcommand --order_oid $ORDER_OID --detail $detail --output $output "
-      python vmctl.py  $vmctlcommand --order_oid "$ORDER_OID" --detail $detail --output $output
+      python vmctl.py "$vmctlcommand" --order_oid "$ORDER_OID" --detail "$detail" --output "$output"
       lret=$?
       [ $lret -ne 0 ] && echo "failed." >&2
       ret=$((ret+$lret))
       [ $ret -ne 0 ] && break
     done
     
-    [ ! -z "$ORDER_OID" ] && [ ! -z "$IS_DISRUPTIVE" ] && for vmctlcommand in  'stop' 'restart' ; do
-      python vmctl.py  --detail $detail --output $output $vmctlcommand --order_oid "$ORDER_OID"
+    [ -n "$ORDER_OID" ] && [ -n "$IS_DISRUPTIVE" ] && for vmctlcommand in 'start' 'stop' 'restart'; do
+      python vmctl.py --detail "$detail" --output "$output" "$vmctlcommand" --order_oid "$ORDER_OID"
       lret=$?
       [ $lret -ne 0 ] && echo "failed." >&2
       ret=$((ret+$lret))

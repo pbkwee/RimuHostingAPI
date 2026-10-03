@@ -90,6 +90,7 @@ class Args(object):
             api = rimuapi.Api()
             api.output = 'json'
             api.detail = 'short'
+            api.is_disable_calls = self.is_disable_calls
             existing = xx.orders('N', {'server_type': 'VPS', 'include_inactive' : 'N', 'order_oids': self.reinstall_order_oid}, output=api)
             existing = json.loads(existing)
             #rimuapi.debug(' existing is None ' + str(existing is None) + " type(existing) " + str(type(existing)))

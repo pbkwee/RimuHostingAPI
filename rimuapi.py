@@ -3,6 +3,7 @@ import urllib
 import os
 import re
 import sys
+from copy import deepcopy
 from requests import Request, Session
 from warnings import catch_warnings
 from pprint import pformat
@@ -42,7 +43,8 @@ def valid_domain_name(domain_name):
 
     if len(domain_name) > 255:
         return False
-    domain_name.rstrip('.')
+    if domain_name.endswith('.'):
+        domain_name = domain_name[:-1]
     allowed = re.compile("(?!-)[A-Z0-9-]{1,63}(?<!-)$", re.IGNORECASE)
     return all(allowed.match(x) for x in domain_name.split("."))
 
@@ -147,8 +149,6 @@ class Api:
 
         if not self._key:
             self._key = os.getenv('RIMUHOSTING_APIKEY', None)
-        if not self._base_url:
-            self._base_url = os.getenv('RIMUHOSTING_BASEURL', None)
         settings = load_settings('.rimuhosting')
         if settings:
             if not self._key:
@@ -165,6 +165,8 @@ class Api:
                 self._is_ssl_verify = settings.RIMUHOSTING_ISVERIFYSSL
                 if isDebug:
                     debug("Verify SSL certificate per RIMUHOSTING_ISVERIFYSSL setting in .rimuhosting settings file to " + str(self._is_ssl_verify))
+
+        self._base_url = os.getenv('RIMUHOSTING_BASEURL') or self._base_url
 
     def __send_request(self, url, data=None, method='GET', isKeyRequired=True, output = None
                        , json_root = None, json_keys = None
@@ -204,9 +206,7 @@ class Api:
         debug("__send_request_uri:"+str(url))
         debug("__send_request_data:"+str(data))
         if output.is_disable_calls:
-            # a fancy implementation could return some mocked up data
-            debug("disabling call and returning nothing.")
-            return None
+            raise HumanReadableException("API calls are disabled (--is_disable_calls).")
         debug("__send_request_response>>>")
         prepped = s.prepare_request(req)
         resp = s.send(prepped, timeout=3600, verify=self._is_ssl_verify)
@@ -270,57 +270,7 @@ class Api:
             jsonpath_expr = parse(jsonpath_query)
             t={}
             for match in jsonpath_expr.find(resp):
-                def _populate2(d: dict, match):
-                    #debug("_populate0 " + str(name) + " match " + str(m.id_pseudopath) + " d " + str(d))
-                    #debug("_populate0 match.id_psuedopath = " + str(match.id_pseudopath) + " val=" + str(match.value))
-                    # about_orders.[0].domain_name=laptop.deletemesoon.com
-                    # e.g. sample path: about_orders.[0].location.data_center_location_code
-                    names = str(match.id_pseudopath).split(".")
-                    i = 0
-                    current = d
-                    prev = None
-                    indexname = None
-                    while True:
-                        if i>= len(names):
-                            break
-                        name = names[i]
-                        # e.g. data_center_location_code from about_orders.[0].location.data_center_location_code
-                        if i==len(names)-1:
-                            current[name] = match.value
-                            return
-                        i=i+1
-                        index = int(name.replace('[', '').replace(']','')) if name.find('[')==0 else None
-                        if index is None:
-                            # e.g. about_orders from data_center_location_code from about_orders.[0].location.data_center_location_code
-                            #debug("current = " + name)
-                            indexname = name
-                            if name in current:
-                                prev = current
-                                current = current[name]
-                                continue;
-                            temp = {}
-                            current[name] = temp
-                            prev = current
-                            current = temp
-                            continue
-                        # e.g. [0] from about_orders.[0].location.data_center_location_code
-                        array=[]
-                        if indexname in prev:
-                            array = prev[indexname]
-                        else:
-                            prev[indexname] = array
-                        #debug("populate: array type is " + str(type(array)))
-                        if type(array) is dict:
-                            array = []
-                            prev[indexname] = array
-                        temp = {}
-                        if index >= len(array):
-                            array.insert(index, temp)
-                        else:
-                            temp = array[index]
-                        current = temp
-                _populate2(t, match)
-                #debug("response after jsonpath_expr match: " + str(t))
+                t = match.full_path.update_or_create(t, match.value)
             resp = t
         else:
             debug("output: json_keys" + str(json_keys));
@@ -349,16 +299,7 @@ class Api:
                     resp = t
 
         if output.output == "json":
-            
-            #r2 = {}
-            #r2['result']= resp;
-            #resp = r2;
-            if output.is_pretty:
-                debug("output: is_pretty") 
-                #resp = pformat(resp, compact = True)
-                #debug("resp prior to pretty is " + str(resp))
-                resp = json.dumps(resp, indent=4)
-            return resp
+            return json.dumps(resp, indent=4 if output.is_pretty else None)
         
         if output.output == "flat":
             debug("output: flatten")
@@ -472,6 +413,7 @@ class Api:
 
     def _get_create_req(self, domain=None, kwargs={}, isReinstall = False):
         _options, _params, _req = {}, {}, {}
+        kwargs = deepcopy(kwargs)
         _req = kwargs
         if not 'instantiation_options' in _req:
             _req['instantiation_options'] = _options
@@ -508,7 +450,7 @@ class Api:
         if 'file_injection_data' in kwargs:
             _req['file_injection_data'] = kwargs['file_injection_data']
         if 'ssh_pub_key' in kwargs:
-            if not _req['file_injection_data']:
+            if not _req.get('file_injection_data'):
                 _req['file_injection_data'] = []
             _req['file_injection_data'].append(
                 {'data_as_string': kwargs['ssh_pub_key'],
