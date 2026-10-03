@@ -1,262 +1,258 @@
-# Rimu Hosting API
+# RimuHosting API
 
-A python library to use the RimuHosting server management API.
+A Python library and command-line tools for the RimuHosting server management API.
+The tools list VMs, quote pricing, create or reinstall VMs, change resources,
+control VM state, cancel VMs, and update reverse DNS.
 
-Also includes some standalone command line tools to perform some common operations.
+## Install
 
-To install the master branch:
+Use Python 3. From this checkout, create a virtual environment and install the
+library and its dependencies:
 
-```
-pip install rimu
-```
-
-To install this particular version (which has a few changes used with https://github.com/pbkwee/rimuhosting-k8s) first git clone this repository, then run:
-
-```
-python3 setup.py build install
-```
-
-# Environment
-An API Key is required.  Get the API key from http://rimuhosting.com/cp/apikeys.jsp.  Then export RIMUHOSTING_APIKEY=xxxx (the digits only) or in ~/.rimuhosting file set:
-
-```
-RIMUHOSTING_APIKEY=xxxx
+```sh
+python3 -m venv .venv
+. .venv/bin/activate
+python3 -m pip install .
 ```
 
-Other options include:
+The dependencies are `requests` and `jsonpath_ng`. The installation provides the
+`rimuapi` module. Run the command-line scripts from this checkout.
 
-```
-# output debug messages
-IS_DEBUG=True
-```
-# lsvms.py
+## Configure access
 
-List VMs
+Get an API key from [the RimuHosting control panel](https://rimuhosting.com/cp/apikeys.jsp).
+Set `RIMUHOSTING_APIKEY` to the key's digits:
 
+```sh
+export RIMUHOSTING_APIKEY='YOUR_API_KEY_DIGITS'
 ```
-$ python lsvms.py --detail minimal
+
+Alternatively, create `~/.rimuhosting`. This settings file uses Python syntax:
+
+```python
+RIMUHOSTING_APIKEY = 'YOUR_API_KEY_DIGITS'
+IS_DEBUG = False
+# Optional overrides:
+# RIMUHOSTING_BASEURL = 'https://rimuhosting.com'
+# RIMUHOSTING_ISVERIFYSSL = True
+```
+
+The library searches the home directory, then directories in `PATH`, for the
+first `.rimuhosting` file. The environment variable `RIMUHOSTING_APIKEY` takes
+precedence over the settings file. The environment variable `RIMUHOSTING_BASEURL`
+also overrides the settings file. The default base URL is `https://rimuhosting.com`.
+
+## Commands
+
+Run `python3 SCRIPT --help` for the full options for each command.
+Replace `123456` with a VM order ID from `lsvms.py`.
+
+| Script | Operation |
+| --- | --- |
+| `lsvms.py` | List VMs and find order IDs |
+| `vmctl.py` | Start, stop, restart, or read VM status and order information |
+| `pricing.py` | Quote pricing without creating or reinstalling a VM |
+| `mkvm.py` | Create a VM or reinstall an existing VM |
+| `chattrvm.py` | Change VM memory or disk sizes |
+| `rmvm.py` | Shut down and cancel a VM |
+| `rdns.py` | Set or clear a reverse DNS (PTR) record |
+
+### List and inspect VMs
+
+```sh
+python3 lsvms.py --detail minimal
+python3 lsvms.py --order_oid 123456
+python3 lsvms.py --search example.com --exclude_inactive
+python3 vmctl.py status --order_oid 123456
+python3 vmctl.py info --order_oid 123456 --detail full
+```
+
+`--include_inactive` and `--exclude_inactive` are mutually exclusive.
+If neither option is supplied, the API determines which orders to include.
+
+### Control VM state
+
+The action and `--order_oid` are required. `status` and `info` only read information.
+The other actions change VM state:
+
+```sh
+python3 vmctl.py start --order_oid 123456
+python3 vmctl.py stop --order_oid 123456
+python3 vmctl.py restart --order_oid 123456
+```
+
+### Configure and quote a VM
+
+Save the VM configuration in a JSON file, such as `server.json`:
+
+```json
 {
-    "human_readable_message": "Found 4 orders",
-    "about_orders": [
-        {
-            "location": {
-                "data_center_location_code": "DCDALLAS",
-                "data_center_location_name": "Dallas"
-            },
-            "running_state": "RUNNING",
-            "deployed_state": "DEPLOYED",
-            "order_description": "LaunchtimeVPSDal; Server Type: VM; Location: Dallas; 4GB memory; 8GB on SSD disk image; Data Transfer: 6GB; Host: host1317.rimuhosting.com; 74.50.53.162; Debian 11 64-bit (aka Bullseye); Control Panel: none; 21.19 USD/m",
-            "order_oid": 2853299702,
-            "allocated_ips": {
-                "primary_ip": "74.50.53.162"
-            },
-            "billing_info": {
-                "monthly_recurring_amt": {
-                    "amt_usd": 21.19
-                }
-            },
-            "domain_name": "laptop.deletemesoon.com"
-        }
-      ]
-}
-
-```
-# vmctl.py
-Control a VM (start, stop, restart, info, status)
-```
-usage: vmctl.py [-h] --order_oid ORDER_OID 
-                [{start,stop,restart,status,info}]
-```
-
-e.g. stop a VM
-
-```
-$ python vmctl.py stop  --order_oid 2853299702 --detail minimal
-{
-    "human_readable_message": "laptop.deletemesoon.com stopped.",
-    "request": {
-        "running_state": "NOTRUNNING"
-    },
-    "running_vps_info": {
-        "running_state": "NOTRUNNING",
-        "deployed_state": "DEPLOYED",
-        "pings_ok": false
-    },
-        "about_order": {
-        "order_description": "LaunchtimeVPSDal; Server Type: VM; Location: Dallas; 4GB memory; 8GB on SSD disk image; Data Transfer: 6GB; Host: host1317.rimuhosting.com; 74.50.53.162; Debian 11 64-bit (aka Bullseye); Control Panel: none; 21.19 USD/m; VM not running (stopped on request); Not running.",
-        "running_state": "NOTRUNNING",
-        "order_oid": 2853299702,
-        "deployed_state": "DEPLOYED",
-        "location": {
-            "data_center_location_code": "DCDALLAS",
-            "data_center_location_name": "Dallas"
-        },
-        "domain_name": "laptop.deletemesoon.com",
-        "billing_info": {
-            "monthly_recurring_amt": {
-                "amt_usd": 21.19
-            }
-        },
-        "allocated_ips": {
-            "primary_ip": "74.50.53.162"
-        }
-    }
+  "dc_location": "DCDALLAS",
+  "instantiation_options": {
+    "domain_name": "vm.example.com",
+    "distro": "YOUR_DISTRIBUTION_ID"
+  },
+  "vps_parameters": {
+    "memory_mb": 2048,
+    "disk_space_mb": 30720
+  }
 }
 ```
 
-# pricing.py
+Replace `YOUR_DISTRIBUTION_ID` with the distribution identifier you want to install.
+JSON disk fields use MB. Command-line disk options use GB and convert each GB to
+1024 MB. For example, `--disk_space_gb 30` sends `30720` MB.
 
-Getting sample pricing:
+Load the file, then quote pricing or create the VM:
 
-```
-$ python pricing.py  --help
-usage: pricing.py [-h] [--server_json_file SERVER_JSON]
-                  [--cloud_config CLOUD_CONFIG] [--dc_location DC_LOCATION]
-                  [--reinstall_order_oid REINSTALL_ORDER_OID]
-                  [--memory_mb MEMORY_MB] [--disk_space_gb DISK_SPACE_GB]
-                  [--disk_space_2_gb DISK_SPACE_2_GB] [--distro DISTRO]
-                  [--features FEATURES] [--domain_name DOMAIN_NAME]
-                  [--is_abort_early] [--debug] [--output [{raw,json,flat}]]
-                  [--detail [{minimal,short,full}]] [--is_pretty] [--is_ugly]
-                  [--jsonpath JSONPATH] [--is_disable_calls]
-
-Get pricing information.
-
-optional arguments:
-  -h, --help            show this help message and exit
-  --server_json_file SERVER_JSON
-                        Server json config file. e.g. containing memory_mb and
-                        disk_space_gb. per http://apidocs.rimuhosting.com/jaxb
-                        docs/com/rimuhosting/rs/order/OSDPrepUtils.NewVPSReque
-                        st.html
-  --cloud_config CLOUD_CONFIG
-                        CoreOS cloud config file. Requires a 'distro' of
-                        coreos.64
-  --dc_location DC_LOCATION
-                        Optional data center location. e.g. DCDALLAS,
-                        DCFRANKFURT, DCAUCKLAND
-  --reinstall_order_oid REINSTALL_ORDER_OID
-                        Reinstall the specified VM
-  --memory_mb MEMORY_MB
-                        Optional memory size (MB) to override server json
-  --disk_space_gb DISK_SPACE_GB
-                        Optional disk size (GB) to override server json
-  --disk_space_2_gb DISK_SPACE_2_GB
-                        Optional disk (#2) size (GB) to override server json
-  --distro DISTRO       Optional distro type to override server json
-  --features FEATURES   Optional space separated features like ssd, nvme,
-                        recentcpu
-  --domain_name DOMAIN_NAME
-                        Optional domain name to override server json
-  
-$ python pricing.py  --disk_space_gb 10 --memory_mb 3192
-{
-    "result": {
-        "monthly_recurring_amt": {
-            "amt_usd": 11.11,
-            "amt": 11.11,
-            "currency": "CUR_USD"
-        },
-        "human_readable_message": "The price for 3192MB memory and 10GB disk in Dallas is 11.11 USD/month.  You need to enter billing information."
-    }
-}
-
+```sh
+python3 pricing.py --server_json_file server.json
+python3 mkvm.py --server_json_file server.json
 ```
 
-# mkvm.py
-Create a new VM.
+`pricing.py` only quotes pricing. `mkvm.py` creates a VM unless
+`--reinstall_order_oid` is supplied.
+
+Configuration is applied in this order:
+
+1. Load `--server_json_file`, if supplied.
+2. Merge `--extra_server_json`, if supplied. Matching top-level fields are replaced;
+   nested objects are not merged.
+3. Apply explicit options such as `--memory_mb`, `--disk_space_gb`, `--dc_location`,
+   `--distro`, `--domain_name`, `--features`, and `--cloud_config`.
+
+For example, quote a larger boot disk without editing the file:
+
+```sh
+python3 pricing.py --server_json_file server.json --disk_space_gb 40
 ```
-usage: mkvm.py [-h] [--server_json_file SERVER_JSON_FILE]
-               [--extra_server_json EXTRA_SERVER_JSON]
-               [--cloud_config CLOUD_CONFIG] [--dc_location DC_LOCATION]
-               [--reinstall_order_oid REINSTALL_ORDER_OID]
-               [--memory_mb MEMORY_MB] [--disk_space_gb DISK_SPACE_GB]
-               [--disk_space_2_gb DISK_SPACE_2_GB] [--distro DISTRO]
-               [--features FEATURES] [--domain_name DOMAIN_NAME]
-Create a VM.
 
-optional arguments:
-  -h, --help            show this help message and exit
-  --server_json_file SERVER_JSON_FILE
-                        Server json config file. e.g. containing memory_mb and
-                        disk_space_gb. per http://apidocs.rimuhosting.com/jaxb
-                        docs/com/rimuhosting/rs/order/OSDPrepUtils.NewVPSReque
-                        st.html
-  --extra_server_json EXTRA_SERVER_JSON
-                        Extra json passed through to create the vm. e.g.
-                        '{"host_server_selector": { "min_vm_disk_free_gb" :
-                        300 }}' per http://apidocs.rimuhosting.com/jaxbdocs/co
-                        m/rimuhosting/rs/order/OSDPrepUtils.NewVPSRequest.html
-  --cloud_config CLOUD_CONFIG
-                        CoreOS cloud config file. Requires a 'distro' of
-                        coreos.64
-  --dc_location DC_LOCATION
-                        Optional data center location. e.g. DCDALLAS,
-                        DCFRANKFURT, DCAUCKLAND
-  --reinstall_order_oid REINSTALL_ORDER_OID
-                        Reinstall the specified VM
-  --memory_mb MEMORY_MB
-                        Optional memory size (MB) to override server json
-  --disk_space_gb DISK_SPACE_GB
-                        Optional disk size (GB) to override server json
-  --disk_space_2_gb DISK_SPACE_2_GB
-                        Optional disk (#2) size (GB) to override server json
-  --distro DISTRO       Optional distro type to override server json
-  --features FEATURES   Optional space separated features like ssd, nvme,
-                        recentcpu
-  --domain_name DOMAIN_NAME
-                        Optional domain name to override server json
-  ```
+Pass space-separated features as one quoted argument, such as
+`--features 'ssd nvme'`. `--cloud_config FILE` reads cloud-config data for a
+distribution that supports it.
 
-# rmvm.py
-Shutdown, and cancel, a server.
+### Reinstall a VM
 
+`mkvm.py --reinstall_order_oid` reinstalls the selected VM.
+The script checks that the lookup returns exactly one VM with the requested order ID.
+
+```sh
+python3 mkvm.py --reinstall_order_oid 123456 --distro YOUR_DISTRIBUTION_ID
 ```
-./rmvm.py  --help
-usage: rmvm.py [-h] --order_oid ORDER_OID [--debug]
-               [--output [{raw,json,flat}]] [--detail [{minimal,short,full}]]
-               [--is_pretty] [--is_ugly] [--jsonpath JSONPATH]
-               [--is_disable_calls]
 
-optional arguments:
-  -h, --help            show this help message and exit
-  --order_oid ORDER_OID
-                        order_oid to delete
+Reinstall retains the current data center, memory, and boot-disk size unless the
+corresponding command-line option is supplied. Values for these three settings
+in the JSON file do not override the current resources during reinstall.
+
+`pricing.py` accepts the same configuration options. With `--reinstall_order_oid`,
+pricing performs the lookup and prepares the same configuration, then requests a
+quote. Pricing does not reinstall the VM.
+
+`--is_abort_early` applies to `mkvm.py`. The flag stops before the create or
+reinstall request. A reinstall lookup still runs. The flag does not print a preview.
+
+### Change resources
+
+Specify the requested total size, rather than the amount to add:
+
+```sh
+python3 chattrvm.py --order_oid 123456 --disk_space_gb 30
+python3 chattrvm.py --order_oid 123456 --memory_mb 4096 --disk_space_2_gb 20
 ```
-# rdns.py
 
+Order IDs, memory sizes, and boot-disk sizes must be positive integers.
+Secondary-disk sizes must be zero or greater.
+`chattrvm.py` supports `--disk_space_2_gb` and `--disk_space_3_gb`.
+`mkvm.py` and `pricing.py` support `--disk_space_2_gb`.
+
+`chattrvm.py` sends only the resource options supplied on the command line.
+An explicit secondary-disk size of zero is sent to the API.
+The API determines whether a requested resource change is permitted.
+
+### Cancel a VM
+
+This command shuts down and cancels the selected VM:
+
+```sh
+python3 rmvm.py --order_oid 123456
 ```
-./rdns.py  --help
-usage: rdns.py [-h] --order_oid ORDER_OID [--ip IP]
-               [--domain_name DOMAIN_NAME] [--debug]
-               [--output [{raw,json,flat}]] [--detail [{minimal,short,full}]]
-               [--is_pretty] [--is_ugly] [--jsonpath JSONPATH]
-               [--is_disable_calls]
 
-Set a PTR record for an server's IP address. Command is named after what needs
-to happen before a 'dig' can return something.
+### Update reverse DNS
 
-optional arguments:
-  -h, --help            show this help message and exit
-  --order_oid ORDER_OID
-                        Set the reverse DNS (PTR) on this server
-  --ip IP               Optional IP address to set (else first public IP on
-                        server)
-  --domain_name DOMAIN_NAME
-                        The name to set. Leave empty to clear the PTR record.
+Set a PTR record for a specific IP address:
+
+```sh
+python3 rdns.py --order_oid 123456 --ip 192.0.2.10 --domain_name vm.example.com
 ```
-# Debug command line options
-These options are available across each command.
 
+If `--ip` is omitted, the API selects the VM's first public IP address.
+To clear the PTR record, omit `--domain_name` or pass an empty string:
+
+```sh
+python3 rdns.py --order_oid 123456 --ip 192.0.2.10 --domain_name ''
 ```
-  --debug               Show debug logging
-  --output [{raw,json,flat}]
-                        format of output
-  --detail [{minimal,short,full}]
-                        amount of detail
-  --is_pretty           pretty format json
-  --is_ugly             leaves json formatting
-  --jsonpath JSONPATH   only output these fields using an jsonpath query
-  --is_disable_calls    throw an exception rather than making a call
 
-  ```
+## Output and diagnostics
+
+These options are available on all Python commands:
+
+| Option | Behavior |
+| --- | --- |
+| `--output json` | Format the selected response as JSON; this is the default |
+| `--output flat` | Write the selected response as `field=value` lines |
+| `--output raw` | Write the original API JSON text; ignore detail and JSONPath selection |
+| `--detail short` | Return the standard fields for the command; this is the default |
+| `--detail minimal` | Select summary fields with the command's JSONPath expression |
+| `--detail full` | Retain the complete API response, including its response wrapper |
+| `--jsonpath EXPRESSION` | Override field selection when used with `--detail minimal` |
+| `--is_pretty` | Indent JSON output; this is the default |
+| `--is_ugly` | Write compact JSON without indentation |
+| `--debug` | Write request and response metadata to stderr, without request or response bodies |
+| `--is_disable_calls` | Raise an error before sending any API request; no preview is printed |
+
+For example, select order IDs:
+
+```sh
+python3 lsvms.py --detail minimal --jsonpath '$..order_oid' --is_ugly
+```
+
+HTTP errors include the status and reason. When a handled JSON error includes a
+human-readable API message, the scripts preserve that message for both 4xx and
+5xx responses. Other error responses fall back to the HTTP status and reason.
+
+Connection attempts time out after 30 seconds. The read timeout is one hour to
+allow long server operations. The read timeout is not a total operation deadline.
+
+## Use the library
+
+```python
+from rimuapi import Api
+
+api = Api()  # Uses the same environment variables and settings file.
+print(api.orders())
+```
+
+The default return value is formatted JSON text. Set `api.detail`, `api.output`,
+and `api.is_pretty` to change the output in the same way as the command-line options.
+
+## Check the scripts
+
+Run the offline regression checks from this checkout:
+
+```sh
+python3 test-chattrvm.py && python3 test-rimuapi.py
+```
+
+The checks mock HTTP transport and shell commands. They need no API key and do
+not change any servers.
+
+`rimuapitests.sh` uses the live API and requires an API key. It lists VMs and,
+when an order ID is supplied, reads that VM's status and information:
+
+```sh
+bash rimuapitests.sh --order_oid 123456 --details 'minimal short' --outputs 'json flat'
+```
+
+The shell runner invokes `python`. Ensure `python` resolves to Python 3, such as
+by activating the virtual environment above. The `--is_disruptive` flag also
+allows the runner to start, stop, and restart the selected VM.

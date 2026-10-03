@@ -1,26 +1,18 @@
 #!/usr/bin/env python
-import urllib
+import urllib.parse
 import os
-import re
+import argparse
 import sys
 from copy import deepcopy
 from requests import Request, Session
-from warnings import catch_warnings
-from pprint import pformat
-#import objectpath
-#import jsonpath_ng
 
-try:
-    import json
-except ImportError:
-    import simplejson as json
+import json
 
 isDebug=False
 def debug(debugMsg):
     if isDebug:
         print(debugMsg, file=sys.stderr)
-        #print(debugMsg)
-        
+
 def _addOutputArgument(parser):
     parser.add_argument("--debug", action="store_true", help="Show debug logging")
     parser.add_argument('--output', help='format of output', nargs='?', default='json', choices=('raw', 'json', 'flat'))
@@ -29,6 +21,18 @@ def _addOutputArgument(parser):
     parser.add_argument('--is_ugly', help='leaves json formatting', dest='is_pretty', action="store_false")
     parser.add_argument('--jsonpath', help='only output these fields using an jsonpath query')
     parser.add_argument('--is_disable_calls', help='throw an exception rather than making a call', action="store_true", default = False)
+
+def positive_int(value):
+    value = int(value)
+    if value <= 0:
+        raise argparse.ArgumentTypeError("must be a positive integer")
+    return value
+
+def nonnegative_int(value):
+    value = int(value)
+    if value < 0:
+        raise argparse.ArgumentTypeError("must be a nonnegative integer")
+    return value
 
 def sort_unique(sequence):
     import itertools
@@ -47,7 +51,6 @@ def valid_domain_name(domain_name):
         domain_name = domain_name[:-1]
     allowed = re.compile("(?!-)[A-Z0-9-]{1,63}(?<!-)$", re.IGNORECASE)
     return all(allowed.match(x) for x in domain_name.split("."))
-
 
 def load_settings(name, path=None):
     import importlib.util
@@ -99,26 +102,10 @@ def _flattenJSON(y):
                         )
                 i += 1
         else:
-            #out[name[:-1]] = x
             out[name] = x
 
     flatten(y)
     return out
-
-#def _getSimplifiedOrder(self, order):
-#    details = objectpath.Tree(order) 
-#    ip = details.execute("$.allocated_ips.primary_ip")
-#    #print(pformat(order))
-#    
-#    
-#    summary = {"order_oid" : order["order_oid"]
-#               , "primary_ip" : "" if ip is None else ip
-#               , "domain_name" : order["domain_name"]
-#               , "dc_location" : order["location"]["data_center_location_code"]
-#               , "running_state" : order["running_state"]
-#               , "memory_mb" : details.execute("$.vps_parameters.memory_mb")
-#               , "order_description" : details.execute("$.order_description") }
-#    return summary
 
 class HumanReadableException(Exception):
     pass
@@ -132,20 +119,14 @@ class Api:
     is_pretty = True
     jsonpath = None
     is_disable_calls = False
-    
+
     simplified_order_json = '$..(pings_ok, running_state, deployed_state, order_description, amt_usd, order_oid, domain_name, primary_ip, human_readable_message, data_center_location_code, data_center_location_name)'
 
-    #output = "flat"
-    #detail = "short" 
-    #is_pretty = True
-    
     def __init__(self, key=None):
         global isDebug
         self._key = key
         self._base_url = 'https://rimuhosting.com'
         self._is_ssl_verify = True
-        
-        #self._distros = []
 
         if not self._key:
             self._key = os.getenv('RIMUHOSTING_APIKEY', None)
@@ -175,8 +156,7 @@ class Api:
         if isKeyRequired and not self._key:
             raise Exception('API Key is required.  Get the API key from http://rimuhosting.com/cp/apikeys.jsp.  Then export RIMUHOSTING_APIKEY=xxxx (the digits only) or add RIMUHOSTING_APIKEY=xxxx to a ~/.rimuhosting file.')
         headers = {
-            #'Content-Type': 'application/json',
-            'Content-Type': 'application/x-www-form-urlencoded' if isinstance(data, str) else 'application/json',  
+            'Content-Type': 'application/x-www-form-urlencoded' if isinstance(data, str) else 'application/json',
             'Accept': 'application/json'
         }
         if not output:
@@ -187,75 +167,59 @@ class Api:
            output.output = "raw"
         if not output.is_disable_calls:
            output.is_disable_calls = False
-           
+
         if isKeyRequired:
             headers['Authorization']= "rimuhosting apikey=%s" % self._key
-        
-        #url = urllib.parse.urljoin(self._base_url, url)
+
         url = self._base_url+url
 
         data = data if isinstance(data, str) else json.dumps(data)
 
         s = Session()
-        #s.verify=self._is_ssl_verify
 
         req = Request(method, url,
                       data=data,
                       headers=headers
                       )
-        debug("__send_request_uri:"+str(url))
-        debug("__send_request_data:"+str(data))
+        debug("HTTP request: " + method + " " + str(url))
         if output.is_disable_calls:
             raise HumanReadableException("API calls are disabled (--is_disable_calls).")
         debug("__send_request_response>>>")
         prepped = s.prepare_request(req)
-        resp = s.send(prepped, timeout=3600, verify=self._is_ssl_verify)
+        resp = s.send(prepped, timeout=(30, 3600), verify=self._is_ssl_verify)
         debug("__send_request_result:ok:"+str(self._is_ssl_verify)+"/"+str(resp.ok)+":")
-        debug(str(resp.text))
         debug("HTTP status:"+str( resp.status_code))
         debug("Content-Type:"+str(resp.headers.get("content-type")))
-        debug("Response body:"+str(repr(resp.text[:1000])))
         debug("__send_request_response<<<")
 
-        content_type = (resp.headers.get("content-type") or "").lower()
-
-        if "application/json" not in content_type:
-            raise Exception("Expected an application/json response, got "+(resp.headers.get("content-type") or ""))
-
         if not resp.ok:
-            message = resp.text
-            try: 
-                #debug("error " + str(resp))
-                j2 = resp.json()
-                for val in j2:
-                    if "error_info" in j2[val] and "human_readable_message" in j2[val]["error_info"]:
-                        message = j2[val]["error_info"]["human_readable_message"]
-                        raise HumanReadableException(message)
-            finally:
-                # no-op, just throw the original message
-                True
-            raise Exception(resp.status_code, resp.reason, message)
-        
+            status = "HTTP %s %s" % (resp.status_code, resp.reason)
+            try:
+                error_response = resp.json()
+            except ValueError:
+                error_response = None
+            if isinstance(error_response, dict):
+                for result in [error_response] + list(error_response.values()):
+                    info = result.get('error_info') if isinstance(result, dict) else None
+                    if isinstance(info, dict) and isinstance(info.get('human_readable_message'), str) and info['human_readable_message']:
+                        raise HumanReadableException(status + ": " + info['human_readable_message'])
+            raise HumanReadableException(status)
 
-        #if not output.is_pretty:
-        #   output.is_pretty = True
+        content_type = (resp.headers.get("content-type") or "").lower()
+        if "application/json" not in content_type:
+            raise HumanReadableException("HTTP %s %s: Expected an application/json response, got %s" %
+                                         (resp.status_code, resp.reason, content_type))
 
-           
         if output.output == "raw":
             return resp.text
 
         if output.jsonpath is not None:
             jsonpath_query = output.jsonpath
-        #debug("json_minimal_fields: " + str(jsonpath_query))
 
-        #debug("output:detail:"+output.detail+":output:"+output.output+":is_pretty:"+str(output.is_pretty))
         resp = resp.json();
         debug("output:" + " detail:" + str(output.detail) + " output: " + str(output.output)
-               + " json_root: " + str(json_root) + " json_keys: " + str(list(json_keys))  
+               + " json_root: " + str(json_root) + " json_keys: " + str(list(json_keys))
               + " jsonpath_query: " + str(jsonpath_query) )
-        #debug("json root element for " + json_root + " " + str(resp[json_root]))
-        #debug("json root element for json_root " + json_root + " json_keys " + str(json_keys))
-        #debug("output0: setresponse to " + json_root + " exists? " + str(resp[json_root] is not None) + " output.detail " + output.detail)
         if output.detail != "full" and json_root is not None:
             if json_root in resp:
                 resp = resp[json_root]
@@ -263,9 +227,9 @@ class Api:
                 resp = {}
                 debug('no json_root in response for ' + json_root)
             debug("output: json_root node " + json_root + ("(no value found)" if resp is None else ""))
-        
+
         if jsonpath_query is not None and output.detail == "minimal":
-            from jsonpath_ng import jsonpath, parse
+            from jsonpath_ng import parse
             debug("jsonpath_query  " + str(jsonpath_query))
             jsonpath_expr = parse(jsonpath_query)
             t={}
@@ -274,58 +238,42 @@ class Api:
             resp = t
         else:
             debug("output: json_keys" + str(json_keys));
-            #debug("post json_root resp = " + json.dumps(resp, indent=4))
-                #debug("output1: setresponse to " + json_root)
-            #debug("output0.5: a key exists? json_keys is not None " + str(json_keys is not None) +" len(keys>0) " + str(json_keys is not None and len(json_keys) > 0) + " json_keys " + str(json_keys) )
             if output.detail != "full" and json_keys is not None and len(json_keys) > 0:
-                #debug("json_keys len " + str(len(json_keys)) + " keys " + str(json_keys))
                 if len(json_keys) == 1:
-                    #debug("output2: setting response to " + json_keys[0])
                     t = {}
                     if json_keys[0] in resp:
                         t[json_keys[0]] = resp[json_keys[0]]
                     else:
-                        debug('warn: Could not find json_keys in the response ' + str(json_keys)) 
+                        debug('warn: Could not find json_keys in the response ' + str(json_keys))
                     resp = t
                 else:
                     t={}
                     t['result'] = {}
                     for key in json_keys:
                         if key in resp:
-                            #debug("output3:adding response from " + key)
                             t['result'][key] = resp[key]
                         else:
-                            debug('warn: Could not find json_key in the response for ' + str(key)) 
+                            debug('warn: Could not find json_key in the response for ' + str(key))
                     resp = t
 
         if output.output == "json":
             return json.dumps(resp, indent=4 if output.is_pretty else None)
-        
+
         if output.output == "flat":
             debug("output: flatten")
-            #resp = _flatDict(resp)
             resp = _flattenJSON(resp)
-            
+
             ret = []
             for k, v in resp.items():
                 ret.append(str(k) + "=" + str(v))
             ret2=None
             def _toNumString(dotted):
-                #lpadded=''
                 for comp in dotted.split('.'):
                     comp = comp.replace('[', '').replace(']','')
-                    #debug("comp = " + comp + " dotted = " + dotted + " is digit = " + str(comp.isdigit()) + " find =" + str(comp.find('=')>-1))
                     if comp.isdigit():
-                        #print('comp='+comp.zfill(12)+':::::'+dotted)
                         return comp.zfill(12)
                     if comp.find("=")>-1:
-                        #return dotted
                         return ''
-                    #print('comp='+comp)
-                    #lpadded = lpadded + '.' +(comp.zfill(12) if comp.isdigit() else comp.lower())
-                #print('lpadded='+lpadded)
-                #return lpadded
-                #return dotted
                 return ''
             for v in sorted(ret, key = _toNumString):
                 if ret2 is None:
@@ -333,11 +281,10 @@ class Api:
                 else:
                     ret2=ret2+'\n'+v
             ret = ret2
-                
+
             resp = ret
             return ret
-            
-        
+
         return resp
 
     # list available distros
@@ -360,28 +307,6 @@ class Api:
                                 , json_root = 'get_new_vm_pricing_response', json_keys = ['monthly_recurring_amt', 'human_readable_message'])
         return r
 
-#     def data_centers(self):
-#         import itertools
-#         try:
-#             plans = self._plans
-#         except AttributeError:
-#             plans = self.plans()
-#         dcs = []
-#         lookup = {}
-#         from pprint import pprint
-# 
-#         for i in plans:
-#             i = i['offered_at_data_center']
-#             if not i: 
-#                 continue
-#             code = i['data_center_location_code']
-#             if not code:
-#                 continue
-#             if not code in lookup:
-#                 lookup[code] = i;
-#                 dcs.append(i);
-#         return dcs; 
-
     # list of orders/servers
     def orders(self, include_inactive='N', filter={}, output = None):
         filter['include_inactive'] = include_inactive
@@ -389,27 +314,9 @@ class Api:
         uri = uri.replace('&', ';')
         r = self.__send_request(uri, output = output, json_root='get_orders_response'
                                 , json_keys = ['about_orders', 'human_readable_message']
-                                #, jsonpath_query='$.about_orders[*].(human_readable_message, order_oid, domain_name)')
-                                #, jsonpath_query='$..(human_readable_message, order_oid, domain_name)')
-                                #, jsonpath_query='$..(pings_ok, running_state, deployed_state, order_description, amt_usd, order_oid, domain_name, primary_ip, human_readable_message)'
                                 , jsonpath_query = self.simplified_order_json
                                 )
         return r
-        #data = r.json()
-        #debug("order search uri of " + str(uri) + " returns " + str(data))
-        #debug("about orders  " + str(data['get_orders_response']['about_orders']))
-        #debug("")
-        #debug("about orders 0" + str(data['get_orders_response']['about_orders'][0]))
-        #debug("")
-        #debug("order oid=" + str(data['get_orders_response']['about_orders'][0]['order_oid']))
-        #debug("")
-        #oids =""
-        #for i in data['get_orders_response']['about_orders']:
-        #   oids=oids+str(i['order_oid'])+","
-        #debug("order oids=" + oids)
-        #output = {}
-        #output['about_orders'] = data['get_orders_response']['about_orders']
-        #return output
 
     def _get_create_req(self, domain=None, kwargs={}, isReinstall = False):
         _options, _params, _req = {}, {}, {}
@@ -423,7 +330,6 @@ class Api:
         _params = _req['vps_parameters']
         if domain:
             _options['domain_name'] = domain
-        #print(pformat(_options))
         # optional on reinstall
         if not isReinstall:
             if not 'domain_name' in _options:
@@ -456,22 +362,12 @@ class Api:
                 {'data_as_string': kwargs['ssh_pub_key'],
                  'path': '/root/.ssh/authorized_keys'})
         return _req
-    
+
     # create server
-    def create(self, domain, output = None, **kwargs):
-        _req = self._get_create_req(domain, kwargs)
-        payload = {'new_order_request': _req}
-        #print("dc_location=" + (_req["dc_location"] if "dc_location" in _req else ''))
-        r = self.__send_request('/r/orders/new-vps', data=payload, method='POST', output = output
-                                , json_root='post_new_vps_response', json_keys = ['about_order', 'human_readable_message', 'running_vps_info']
-                                , jsonpath_query = self.simplified_order_json
-                                )
-        return r
 
     def create(self, vmargs={}, output = None):
         _req = self._get_create_req(domain=None, kwargs=vmargs)
         payload = {'new_order_request': _req}
-        #print("dc_location=" + (_req["dc_location"] if "dc_location" in _req else ''))
         r = self.__send_request('/r/orders/new-vps', data=payload, method='POST', output = output
                                 , json_root='post_new_vps_response', json_keys = ['about_order', 'human_readable_message', 'running_vps_info']
                                 , jsonpath_query = self.simplified_order_json
@@ -479,15 +375,6 @@ class Api:
         return r
 
     # reinstall server
-    def reinstall(self, domain, order_oid, output = None, **kwargs):
-        _req = self._get_create_req(domain, kwargs, isReinstall=True)
-        payload = {'new_order_request': _req}
-        r = self.__send_request('/r/orders/order-%s-%s/vps/reinstall' % (order_oid, domain),
-                                data=payload, method='PUT', output=output
-                                , json_root='post_new_vps_response', json_keys = ['about_order', 'human_readable_message', 'setup_messages', 'running_vps_info']
-                                , jsonpath_query = self.simplified_order_json
-                                )
-        return r
 
     def reinstall(self, order_oid, vmargs={}, output = None):
         _req = self._get_create_req(domain=None, kwargs=vmargs, isReinstall=True)
@@ -503,36 +390,17 @@ class Api:
     def status(self, domain, order_oid, output = None):
         r = self.__send_request('/r/orders/order-%s-%s/vps' % (order_oid, domain),  output = output
                                 , json_root='get_vps_status_response', json_keys = ['about_order', 'human_readable_message', 'running_vps_info']
-                                #, jsonpath_query = '$.get_vps_status_response..(pings_ok, running_state, deployed_state, order_description, amt_usd, order_oid, domain_name, primary_ip)')
-                                #, jsonpath_query = '$..(pings_ok, running_state, deployed_state, order_description, amt_usd, order_oid, domain_name, primary_ip, human_readable_message)'
                                 , jsonpath_query = self.simplified_order_json
                                 )
-        
+
         return r
-        #data = r.json()
-        #output = {}
-        #output["running_vps_info"] = data['get_vps_status_response']['running_vps_info']
-        #if "about_order" in data['get_vps_status_response']:
-        #    output["about_order"] = data['get_vps_status_response']['about_order']
-        #return output
-        #return data['get_vps_status_response']['running_vps_info']
-        
-        #return data
 
     def info(self, domain, order_oid, output = None):
         r = self.__send_request('/r/orders/order-%s-%s' % (order_oid, domain), output = output
                                 , json_root = 'get_order_response', json_keys = ['about_order', 'human_readable_message']
-                                #, jsonpath_query = '$.get_order_response.about_order.(order_oid, domain_name, allocated_ips.primary_ip)'
-                                #, jsonpath_query = '$..(order_oid, domain_name, distro, human_readable_message)'
-                                #, jsonpath_query = '$..(order_oid, domain_name, primary_ip, human_readable_message)'
-                                #, jsonpath_query = '$..(pings_ok, running_state, deployed_state, order_description, amt_usd, order_oid, domain_name, primary_ip, human_readable_message)'
                                 , jsonpath_query = self.simplified_order_json
                                 )
         return r
-        #data = r.json()
-        #output = {}
-        #output['about_order'] = data['get_order_response']['about_order'] 
-        #return output
 
     def _get_order_oid(self, domain=None, ip=None, orders=None):
         oids = []
@@ -597,11 +465,7 @@ class Api:
           domain='example.com'
         if ip is  None:
           ip=''
-        urlencoded = urllib.parse.urlencode({'domain_name' : domain_name })
-        if isDebug:
-            debug("form parameters:")
-            debug(urlencoded)
-
+        urlencoded = urllib.parse.urlencode({'domain_name': '' if domain_name is None else domain_name})
         r = self.__send_request('/r/orders/order-%s-%s/ptr;ip=%s' % (order_oid, domain, ip),
                                 data= urlencoded,
                                 method='PUT', output = output

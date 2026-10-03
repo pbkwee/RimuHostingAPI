@@ -1,13 +1,14 @@
 #!/bin/bash
 
 function usage() {
-echo "Run through rimuapi.py commands to get some code coverage.
---order_oid id for vmctl commands
---is_disruptive if it is ok to stop/restart 
---is_destructive if it is ok to delete/reinstall 
---details 'value1 value2', defaults to minimal short full
---outputs 'value1 value2', defaults to json flat raw
+echo "Run command-line checks against the live API. Requires an API key.
+Lists VMs and, when --order_oid is supplied, reads VM status and information.
 
+--order_oid ID       VM order ID for status, info, and permitted state changes
+--is_disruptive      Also run start, stop, and restart on the selected VM
+--details 'VALUES'  Space-separated detail levels (default: minimal short full)
+--outputs 'VALUES'  Space-separated output formats (default: json flat raw)
+--help              Show this help and exit
 "
 
 }
@@ -66,7 +67,7 @@ for output in $OUTPUTS; do
     python lsvms.py --detail "$detail" --output "$output"
     lret=$?
     [ $lret -ne 0 ] && echo "failed." >&2
-    ret=$((ret+$lret))
+    ret=$((ret+lret))
     [ $ret -ne 0 ] && break
     #codex:deprecated start now requires --is_disruptive.
     # [ ! -z "$ORDER_OID" ] && for vmctlcommand in 'start' 'status' 'info'; do
@@ -75,7 +76,7 @@ for output in $OUTPUTS; do
       python vmctl.py "$vmctlcommand" --order_oid "$ORDER_OID" --detail "$detail" --output "$output"
       lret=$?
       [ $lret -ne 0 ] && echo "failed." >&2
-      ret=$((ret+$lret))
+      ret=$((ret+lret))
       [ $ret -ne 0 ] && break
     done
     
@@ -83,7 +84,7 @@ for output in $OUTPUTS; do
       python vmctl.py --detail "$detail" --output "$output" "$vmctlcommand" --order_oid "$ORDER_OID"
       lret=$?
       [ $lret -ne 0 ] && echo "failed." >&2
-      ret=$((ret+$lret))
+      ret=$((ret+lret))
       [ $ret -ne 0 ] && break
     done
   done

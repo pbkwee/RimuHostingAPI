@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
 __author__ = "Peter Bryant <p.misc2@rimuhosting.com>"
-import os
 from setuptools import setup
 NAME = "RimuHostingAPI"
 GITHUB_URL = "https://github.com/pbkwee/%s" % (NAME)
