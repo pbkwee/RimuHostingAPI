@@ -292,6 +292,10 @@ class Api:
         r = self.__send_request('/r/distributions', isKeyRequired=False, output = output, json_root = 'get_distros_response', json_keys=['distro_infos'])
         return r
 
+    def data_centers(self, output=None):
+        return self.__send_request('/r/data-centers', isKeyRequired=False, output=output,
+                                   json_root='get_data_centers_response', json_keys=['data_center_infos'])
+
     def pricing2(self, output = None, server_json = {}):
         _req = self._get_create_req("notexample.com", server_json, isReinstall=False)
         payload = {'new_order_request': _req}

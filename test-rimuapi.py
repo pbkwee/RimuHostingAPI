@@ -234,4 +234,42 @@ with tempfile.TemporaryDirectory(prefix="rimuapi-config-check-") as directory:
         clients.assert_not_called()
         assert marker not in logs.getvalue()
 
+
+# Discovery must use server catalogs and work without an API key.
+for script, path, wrapper, field, rows in [
+    ("lsdistros.py", "/r/distributions", "get_distros_response", "distro_infos", [
+        {"distro_code": "future.64", "distro_description": "Future distribution",
+         "is_promoted": True, "is_recommended": True},
+        {"distro_code": "older.64", "distro_description": "Older distribution",
+         "is_promoted": False, "is_recommended": False}]),
+    ("lsdcs.py", "/r/data-centers", "get_data_centers_response", "data_center_infos", [
+        {"data_center_location_code": "DCTEST", "data_center_location_name": "Test city",
+         "data_center_location_country_2ltr": "NZ"}]),
+]:
+    for catalog in (rows, []):
+        body = {wrapper: {field: catalog, "human_readable_message": "Current catalog"}}
+        response = requests.Response()
+        response.status_code = 200
+        response.headers["content-type"] = "application/json"
+        response._content = json.dumps(body).encode()
+        session = Mock()
+        session.prepare_request.side_effect = lambda request: request.prepare()
+        session.send.return_value = response
+        for options, expected in [
+            ([], {field: catalog}),
+            (["--detail", "minimal", "--jsonpath", "$"], body[wrapper]),
+            (["--output", "raw"], body),
+        ]:
+            with patch.object(rimuapi, "load_settings", return_value=None), \
+                    patch.dict(os.environ, {"RIMUHOSTING_APIKEY": "", "RIMUHOSTING_BASEURL": "https://example.invalid"}), \
+                    patch.object(rimuapi, "Session", return_value=session), \
+                    patch.object(sys, "argv", [script] + options), \
+                    contextlib.redirect_stdout(io.StringIO()) as output:
+                runpy.run_path(str(root / script), run_name="__main__")
+            assert json.loads(output.getvalue()) == expected
+            request = session.send.call_args.args[0]
+            assert request.method == "GET"
+            assert request.url == "https://example.invalid" + path
+            assert "Authorization" not in request.headers
+
 print("API and CLI regression checks passed (no live API calls).")

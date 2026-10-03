@@ -49,6 +49,8 @@ Replace `123456` with a VM order ID from `lsvms.py`.
 
 | Script | Operation |
 | --- | --- |
+| `lsdistros.py` | List enabled distributions, including promoted and recommended choices |
+| `lsdcs.py` | List data center locations enabled for new shared VPS setups |
 | `lsvms.py` | List VMs and find order IDs |
 | `vmctl.py` | Start, stop, restart, or read VM status and order information |
 | `pricing.py` | Quote pricing without creating or reinstalling a VM |
@@ -56,6 +58,29 @@ Replace `123456` with a VM order ID from `lsvms.py`.
 | `chattrvm.py` | Change VM memory or disk sizes |
 | `rmvm.py` | Shut down and cancel a VM |
 | `rdns.py` | Set or clear a reverse DNS (PTR) record |
+
+### Find distribution and data center codes
+
+These catalogs come from the API, so the commands show the server's current
+configuration. Neither command requires an API key:
+
+```sh
+python3 lsdistros.py
+python3 lsdcs.py
+```
+
+`lsdistros.py` uses `GET /r/distributions`. Each entry contains `distro_code`,
+`distro_description`, `is_promoted`, and `is_recommended`. Promoted choices match
+the VPS order form. Enabled distributions can also include older choices.
+Use `distro_code` with `--distro` or JSON `instantiation_options.distro`.
+For example, `deb13.64` selects Debian 13 (Trixie), 64-bit.
+
+`lsdcs.py` uses `GET /r/data-centers`. Each entry contains
+`data_center_location_code`, `data_center_location_name`, and
+`data_center_location_country_2ltr`. Use the location code with `--dc_location`
+or JSON `dc_location`. The catalog includes locations whose shared VPS hosts
+are enabled for new setups. A listed location does not guarantee capacity for
+every requested configuration.
 
 ### List and inspect VMs
 
@@ -90,7 +115,7 @@ Save the VM configuration in a JSON file, such as `server.json`:
   "dc_location": "DCDALLAS",
   "instantiation_options": {
     "domain_name": "vm.example.com",
-    "distro": "YOUR_DISTRIBUTION_ID"
+    "distro": "deb13.64"
   },
   "vps_parameters": {
     "memory_mb": 2048,
@@ -99,7 +124,8 @@ Save the VM configuration in a JSON file, such as `server.json`:
 }
 ```
 
-Replace `YOUR_DISTRIBUTION_ID` with the distribution identifier you want to install.
+The example selects Debian 13 (Trixie), 64-bit. Use `lsdistros.py` to find other
+distribution codes, and `lsdcs.py` to choose an available location.
 JSON disk fields use MB. Command-line disk options use GB and convert each GB to
 1024 MB. For example, `--disk_space_gb 30` sends `30720` MB.
 
@@ -137,7 +163,7 @@ distribution that supports it.
 The script checks that the lookup returns exactly one VM with the requested order ID.
 
 ```sh
-python3 mkvm.py --reinstall_order_oid 123456 --distro YOUR_DISTRIBUTION_ID
+python3 mkvm.py --reinstall_order_oid 123456 --distro deb13.64
 ```
 
 Reinstall retains the current data center, memory, and boot-disk size unless the
