@@ -9,8 +9,10 @@ class Args(object):
         parser.add_argument("--server_json_file", type=str, required=False, help="Read VM configuration from a JSON file; see README.md for the structure")
         parser.add_argument("--extra_server_json", type=str, required=False, help="Merge a JSON object into the configuration, replacing matching top-level fields")
         parser.add_argument("--cloud_config", type=str, required=False, help="Read cloud-config data from a file for a distribution that supports it")
-        parser.add_argument("--dc_location", type=str, required=False, help="Data center code from lsdcs.py; overrides JSON configuration")
+        parser.add_argument("--dc_location", type=str, required=False, help="Data center code from lsdcs.py, e.g. DCSYDNEY2 (Sydney) or DCLONDON (Reading); overrides JSON configuration")
         parser.add_argument("--reinstall_order_oid", type=rimuapi.positive_int, help="Existing VM order ID (positive integer): reinstall with mkvm.py, quote with pricing.py")
+        parser.add_argument("--clone_order_oid", type=rimuapi.positive_int, help="Copy this source VM; omit --image_id to copy its live disks")
+        parser.add_argument("--image_id", type=rimuapi.positive_int, help="Copy this optional_image_id from lsdiskimages.py; source defaults to --reinstall_order_oid")
         parser.add_argument("--memory_mb", type=rimuapi.positive_int, required=False, help="Memory in MB (positive integer); overrides JSON configuration")
         parser.add_argument("--disk_space_gb", type=rimuapi.positive_int, required=False, help="Boot-disk size in GB (positive integer, 1024 MB per GB); overrides JSON configuration")
         parser.add_argument("--disk_space_2_gb", type=rimuapi.nonnegative_int, required=False, help="Second-disk size in GB (zero or greater, 1024 MB per GB); overrides JSON configuration")
@@ -35,18 +37,40 @@ class Args(object):
             extra_server_dict = json.loads(self.extra_server_json)
             server_json = { ** server_json, ** extra_server_dict }
 
-        if not "instantiation_options" in server_json:
-            server_json["instantiation_options"] = dict()
-        if not "vps_parameters" in server_json:
+        cloning = (self.clone_order_oid is not None or self.image_id is not None
+                   or server_json.get("instantiation_via_clone_options") is not None)
+        if cloning:
+            if server_json.get("instantiation_options") or self.distro or self.cloud_config:
+                raise rimuapi.HumanReadableException(
+                    "Cloning cannot use instantiation_options, --distro or --cloud_config. "
+                    "Remove fresh-install settings from the configuration.")
+            options = server_json.setdefault("instantiation_via_clone_options", {})
+            if not isinstance(options, dict):
+                raise rimuapi.HumanReadableException("instantiation_via_clone_options must be a JSON object.")
+            if self.clone_order_oid is not None:
+                options["vps_order_oid_to_clone"] = self.clone_order_oid
+            if self.image_id is not None:
+                options["optional_image_id"] = self.image_id
+            if "vps_order_oid_to_clone" not in options:
+                if self.reinstall_order_oid and "optional_image_id" in options:
+                    options["vps_order_oid_to_clone"] = self.reinstall_order_oid
+                else:
+                    raise rimuapi.HumanReadableException(
+                        "An image needs a source VM: supply --clone_order_oid "
+                        "or --reinstall_order_oid.")
+            server_json.pop("instantiation_options", None)
+        else:
+            options = server_json.setdefault("instantiation_options", {})
+        if server_json.get("vps_parameters") is None:
             server_json["vps_parameters"] = dict()
 
         if self.cloud_config:
             with open(self.cloud_config) as source:
-                server_json["instantiation_options"]["cloud_config_data"] = source.read()
+                options["cloud_config_data"] = source.read()
         if self.dc_location:
             server_json["dc_location"] = self.dc_location
         if self.domain_name:
-            server_json["instantiation_options"]["domain_name"] = self.domain_name
+            options["domain_name"] = self.domain_name
         if self.memory_mb is not None:
             server_json["vps_parameters"]["memory_mb"] = self.memory_mb
         if self.disk_space_gb is not None:
@@ -54,7 +78,7 @@ class Args(object):
         if self.disk_space_2_gb is not None:
             server_json["vps_parameters"]["disk_space_2_mb"] = self.disk_space_2_gb*1024
         if self.distro:
-            server_json["instantiation_options"]["distro"] = self.distro
+            options["distro"] = self.distro
         if self.features:
             server_json["features"] = self.features
 
@@ -79,11 +103,15 @@ class Args(object):
             # Retain existing primary resources unless overridden on the command line.
             if not self.dc_location:
                 server_json["dc_location"] = None
-            if self.memory_mb is None:
-                server_json["vps_parameters"]["memory_mb"] = None
-            if self.disk_space_gb is None:
-                server_json["vps_parameters"]["disk_space_mb"] = None
+            if not cloning or server_json["vps_parameters"]:
+                if self.memory_mb is None:
+                    server_json["vps_parameters"]["memory_mb"] = None
+                if self.disk_space_gb is None:
+                    server_json["vps_parameters"]["disk_space_mb"] = None
 
+        # An omitted resource block lets the server inherit the source VM's sizes.
+        if cloning and not server_json["vps_parameters"]:
+            del server_json["vps_parameters"]
         return server_json
 
     def run(self):

@@ -72,7 +72,7 @@ Replace `123456` with a VM order ID from `lsvms.py`.
 | `mksnapshot.py` | Create a saved root-disk backup and wait for the result |
 | `lsdiskimages.py` | List available disk images, including mounted images and backups |
 | `pricing.py` | Quote pricing without creating or reinstalling a VM |
-| `mkvm.py` | Create a VM or reinstall an existing VM |
+| `mkvm.py` | Create or reinstall a VM from a distribution, live VM, or saved disk image |
 | `chattrvm.py` | Change VM memory or disk sizes |
 | `rmvm.py` | Shut down and cancel a VM |
 | `rdns.py` | Set or clear a reverse DNS (PTR) record |
@@ -171,7 +171,7 @@ Save the VM configuration in a JSON file, such as `server.json`:
 
 ```json
 {
-  "dc_location": "DCDALLAS",
+  "dc_location": "DCSYDNEY2",
   "instantiation_options": {
     "domain_name": "vm.example.com",
     "distro": "deb13.64"
@@ -185,6 +185,8 @@ Save the VM configuration in a JSON file, such as `server.json`:
 
 The example selects Debian 13 (Trixie), 64-bit. Use `lsdistros.py` to find other
 distribution codes, and `lsdcs.py` to choose an available location.
+`DCSYDNEY2` selects Sydney. `DCLONDON` selects Reading.
+For example, pass `--dc_location DCLONDON` to use Reading instead.
 JSON disk fields use MB. Command-line disk options use GB and convert each GB to
 1024 MB. For example, `--disk_space_gb 30` sends `30720` MB.
 
@@ -235,6 +237,59 @@ quote. Pricing does not reinstall the VM.
 
 `--is_abort_early` applies to `mkvm.py`. The flag stops before the create or
 reinstall request. A reinstall lookup still runs. The flag does not print a preview.
+
+### Install from a VM or saved image
+
+Copy a VM's live disks into a new VM, or choose a saved image from its inventory:
+
+```sh
+python3 mkvm.py --clone_order_oid 123456 --domain_name copy.example.com
+python3 lsdiskimages.py --order_oid 123456
+python3 mkvm.py --clone_order_oid 123456 --image_id 789012 --domain_name copy.example.com
+```
+
+`--image_id` is the image's `optional_image_id`, scoped to the source VM.
+Omit it to copy the source's live disks; do not select the mounted boot image by ID.
+Copying live disks may briefly pause the source VM.
+A saved snapshot contains the root disk, not RAM or every disk on the VM.
+The server checks source access, image availability and destination disk capacity.
+
+Reinstall from one of the target VM's own images, or copy a different VM onto it:
+
+```sh
+python3 mkvm.py --reinstall_order_oid 123456 --image_id 789012
+python3 mkvm.py --reinstall_order_oid 654321 --clone_order_oid 123456
+python3 mkvm.py --reinstall_order_oid 654321 --clone_order_oid 123456 --image_id 789012
+```
+
+**Reinstall replaces the target's existing installation.** The source defaults to
+`--reinstall_order_oid` only when an image is selected. A new VM needs
+`--clone_order_oid`. Set `--domain_name` to give the copy a new name; otherwise
+it inherits the source's name. A clone also copies software, data and credentials,
+so review services and secrets before using it independently.
+
+Without resource settings, a new clone inherits the source VM's sizes.
+If you specify resources, provide the required memory and disk sizes; omitted
+values in a partial resource block use the server's plan defaults.
+With resource overrides, omitted extra-disk sizes default to zero.
+Specify extra disks explicitly if they must be retained.
+Reinstall keeps the target's primary resources as described above.
+Do not combine cloning with `--distro`, `--cloud_config` or a JSON
+`instantiation_options` block. Resource, location, output and progress options
+remain available, and `pricing.py` accepts the same clone options for a quote.
+
+JSON configuration uses `instantiation_via_clone_options` instead of
+`instantiation_options`:
+
+```json
+{
+  "instantiation_via_clone_options": {
+    "vps_order_oid_to_clone": 123456,
+    "optional_image_id": 789012,
+    "domain_name": "copy.example.com"
+  }
+}
+```
 
 ### Change resources
 
@@ -355,8 +410,9 @@ python3 lsvms.py --progress
 
 Progress requests advertise both SSE and JSON, preferring SSE. Ordinary JSON
 responses keep their existing output and error handling. Without `--progress`,
-commands continue to request JSON only. The backup endpoint currently supports
-live updates; other endpoints can add support without changes to their commands.
+commands continue to request JSON only. Supporting servers stream VM creation,
+reinstall, resource changes, start/stop/restart, host moves and cancellation, as
+well as snapshots. Other endpoints return ordinary JSON when progress is unavailable.
 
 The stream starts with a `status` event containing `status_code: 202` and a
 `human_readable_message`. This means the request was accepted for processing.

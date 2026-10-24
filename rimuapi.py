@@ -566,16 +566,30 @@ class Api:
         _options, _params, _req = {}, {}, {}
         kwargs = deepcopy(kwargs)
         _req = kwargs
-        if not 'instantiation_options' in _req:
-            _req['instantiation_options'] = _options
+        cloning = _req.get('instantiation_via_clone_options') is not None
+        if cloning:
+            _options = _req['instantiation_via_clone_options']
+            if not isinstance(_options, dict):
+                raise HumanReadableException('instantiation_via_clone_options must be a JSON object.')
+            for field in ('vps_order_oid_to_clone', 'optional_image_id'):
+                if field == 'optional_image_id' and field not in _options:
+                    continue
+                value = _options.get(field)
+                if type(value) is not int or value <= 0:
+                    raise HumanReadableException(field + ' must be a positive integer.')
+            if _req.get('instantiation_options') or any(
+                    field in kwargs for field in ('password', 'distro', 'cloud_config_data', 'control_panel')):
+                raise HumanReadableException('Cloning cannot be combined with fresh-install settings.')
+            _req.pop('instantiation_options', None)
+        else:
+            _options = _req.setdefault('instantiation_options', {})
         if not 'vps_parameters' in _req:
             _req['vps_parameters'] = _params
-        _options = _req['instantiation_options']
         _params = _req['vps_parameters']
         if domain:
             _options['domain_name'] = domain
         # optional on reinstall
-        if not isReinstall:
+        if not isReinstall and not cloning:
             if not 'domain_name' in _options:
                 raise Exception(418, 'Domain name not provided')
         if 'domain_name' in _options:
@@ -605,6 +619,8 @@ class Api:
             _req['file_injection_data'].append(
                 {'data_as_string': kwargs['ssh_pub_key'],
                  'path': '/root/.ssh/authorized_keys'})
+        if cloning and not _params:
+            _req.pop('vps_parameters', None)
         return _req
 
     # create server
