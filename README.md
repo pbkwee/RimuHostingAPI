@@ -277,6 +277,7 @@ These options are available on all Python commands:
 | `--is_pretty` | Indent JSON output; this is the default |
 | `--is_ugly` | Write compact JSON without indentation |
 | `--debug` | Write request and response metadata to stderr, without request or response bodies |
+| `--progress` | Show live progress on stderr when available; otherwise keep the normal response |
 | `--is_disable_calls` | Raise an error before sending any API request; no preview is printed |
 
 For example, select order IDs:
@@ -292,6 +293,39 @@ human-readable API message, the scripts preserve that message for both 4xx and
 Connection attempts time out after 30 seconds. The read timeout is one hour to
 allow long server operations. The read timeout is not a total operation deadline.
 
+<!-- pgb:jaxrssse: Optional progress protocol and shared client options. -->
+## Progress (`--progress`)
+
+`--progress` is accepted by every command. It requests live updates when the
+endpoint supports them. Otherwise the command returns its normal response,
+without progress messages. The final selected output stays on stdout; live
+messages go to stderr:
+
+```sh
+python3 mksnapshot.py --order_oid 123456 --progress --label 'Before upgrade' > backup.json
+python3 lsvms.py --progress
+```
+
+Progress requests advertise both SSE and JSON, preferring SSE. Ordinary JSON
+responses keep their existing output and error handling. Without `--progress`,
+commands continue to request JSON only. The backup endpoint currently supports
+live updates; other endpoints can add support without changes to their commands.
+
+The stream starts with a `status` event containing `status_code: 202` and a
+`human_readable_message`. This means the request was accepted for processing.
+`progress` events contain a `message`. The terminal `result` event contains the
+endpoint's normal JSON response envelope. Its `status_code` and `response_type`
+are the final request outcome. The HTTP stream itself uses status 200, so HTTP
+status alone does not establish the outcome. A final status 202 retains its
+usual meaning: the request was accepted and further work can still be pending.
+
+The client raises an error for a failed terminal result. If the stream disconnects
+or ends without a valid result, the outcome is unknown. The client does not retry
+the request. Check the operation status before repeating a change. For backups,
+refresh disk images and VM status before requesting another backup.
+The read timeout measures inactivity; progress heartbeats can keep a stream open
+longer than one hour.
+
 ## Use the library
 
 ```python
@@ -303,6 +337,17 @@ print(api.create_snapshot(123456, label='Before upgrade'))
 print(api.disk_images(123456))
 ```
 
+Set `api.progress = True` to enable progress messages on stderr for every API call.
+Alternatively, set `api.on_progress = callback` to receive each live message in a
+shared callback. Calls that return ordinary JSON produce no progress messages.
+For example:
+
+```python
+api.progress = True
+print(api.create_snapshot(123456, label='Before upgrade'))
+print(api.orders())
+```
+
 The default return value is formatted JSON text. Set `api.detail`, `api.output`,
 and `api.is_pretty` to change the output in the same way as the command-line options.
 
@@ -312,6 +357,7 @@ Run the offline regression checks from this checkout:
 
 ```sh
 python3 test-chattrvm.py && python3 test-rimuapi.py
+python3 test-progress.py
 ```
 
 The checks mock HTTP transport and shell commands. They need no API key and do

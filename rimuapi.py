@@ -4,7 +4,9 @@ import os
 import argparse
 import sys
 from copy import deepcopy
+from http.client import responses as http_reasons
 from requests import Request, Session
+from requests.exceptions import RequestException
 
 import json
 
@@ -15,6 +17,8 @@ def debug(debugMsg):
 
 def _addOutputArgument(parser):
     parser.add_argument("--debug", action="store_true", help="Show debug logging")
+    # pgb:jaxrssse: Shared opt-in flag; endpoints may still return their normal JSON response.
+    parser.add_argument('--progress', action='store_true', help='Show live progress on stderr when the server supports it; otherwise use the normal response')
     parser.add_argument('--output', help='format of output', nargs='?', default='json', choices=('raw', 'json', 'flat'))
     parser.add_argument('--detail', help='amount of detail', nargs='?', default='short', choices=('minimal','short', 'full'))
     parser.add_argument('--is_pretty', help='pretty format json', action="store_true", default=True)
@@ -110,6 +114,82 @@ def _flattenJSON(y):
 class HumanReadableException(Exception):
     pass
 
+def _http_error(status_code, reason, body):
+    # pgb:jaxrssse: Share error reporting between HTTP failures and final in-stream statuses.
+    status = "HTTP %s %s" % (status_code, reason)
+    if isinstance(body, dict):
+        for result in [body] + list(body.values()):
+            info = result.get('error_info') if isinstance(result, dict) else None
+            if isinstance(info, dict) and isinstance(info.get('human_readable_message'), str) and info['human_readable_message']:
+                return HumanReadableException(status + ": " + info['human_readable_message'])
+    return HumanReadableException(status)
+
+
+def _sse_events(response):
+    # pgb:jaxrssse: Decode SSE framing before applying the existing JSON response handling.
+    # SSE: event: progress\ndata: {"message":"Copying"}\n\n -> ("progress", '{"message":"Copying"}').
+    # Multiple data: lines join with \n; comments are heartbeats. CR, LF and CRLF end lines.
+    response.encoding = 'utf-8-sig'
+    event, data, line, was_cr = 'message', [], [], False
+    for chunk in response.iter_content(chunk_size=1, decode_unicode=True):
+        for character in chunk:
+            if character == '\n' and was_cr:
+                was_cr = False
+                continue
+            was_cr = character == '\r'
+            if character not in ('\r', '\n'):
+                line.append(character)
+                continue
+            value = ''.join(line)
+            line.clear()
+            if not value:
+                if data:
+                    yield event, '\n'.join(data)
+                event, data = 'message', []
+            elif not value.startswith(':'):
+                field, _, value = value.partition(':')
+                if value.startswith(' '):
+                    value = value[1:]
+                if field == 'event':
+                    event = value
+                elif field == 'data':
+                    data.append(value)
+
+
+_OUTCOME_UNKNOWN = "Request outcome is unknown. Check the operation status before repeating the request."
+
+
+def _read_progress(response, on_progress, json_root):
+    # pgb:jaxrssse: Only the endpoint's final result establishes its outcome; EOF alone does not.
+    # result data is the existing JSON envelope, e.g.
+    # {"post_backup_response":{"status_code":200,"response_type":"OK","backup_messages":["Done"]}}.
+    for event, text in _sse_events(response):
+        if event not in ('status', 'progress', 'result'):
+            continue
+        try:
+            body = json.loads(text)
+        except ValueError as error:
+            raise HumanReadableException("Invalid progress JSON. " + _OUTCOME_UNKNOWN) from error
+        if not isinstance(body, dict):
+            raise HumanReadableException("Invalid progress event. " + _OUTCOME_UNKNOWN)
+        if event == 'result':
+            result = body.get(json_root) if json_root is not None else body
+            code = result.get('status_code') if isinstance(result, dict) else None
+            response_type = result.get('response_type') if isinstance(result, dict) else None
+            if (type(code) is not int or not 200 <= code <= 599 or
+                    response_type not in ('OK', 'ERROR') or
+                    (response_type == 'OK') != (code < 300)):
+                raise HumanReadableException("Invalid final progress result. " + _OUTCOME_UNKNOWN)
+            if code >= 300:
+                raise _http_error(code, result.get('status_message') or http_reasons.get(code, ''), body)
+            return text, body
+        message = body.get('message' if event == 'progress' else 'human_readable_message')
+        if not isinstance(message, str):
+            raise HumanReadableException("Invalid progress message. " + _OUTCOME_UNKNOWN)
+        on_progress(message)
+    raise HumanReadableException("Progress stream ended without a final result. " + _OUTCOME_UNKNOWN)
+
+
 class Api:
     global isDebug
     # Show debug logging
@@ -119,6 +199,9 @@ class Api:
     is_pretty = True
     jsonpath = None
     is_disable_calls = False
+    # pgb:jaxrssse: Optional client-wide progress; per-command output settings also reach this shared path.
+    progress = False
+    on_progress = None
 
     simplified_order_json = '$..(pings_ok, running_state, deployed_state, order_description, amt_usd, order_oid, domain_name, primary_ip, human_readable_message, data_center_location_code, data_center_location_name)'
     simplified_disk_image_json = '$..(optional_image_id, file_name, label, size_mb, modified_time, location)'
@@ -153,16 +236,21 @@ class Api:
     def __send_request(self, url, data=None, method='GET', isKeyRequired=True, output = None
                        , json_root = None, json_keys = None
                        , jsonpath_query = None
-                       , json_select = None
+                       , json_select = None, on_progress = None
                        ):
         if isKeyRequired and not self._key:
             raise Exception('API Key is required.  Get the API key from http://rimuhosting.com/cp/apikeys.jsp.  Then export RIMUHOSTING_APIKEY=xxxx (the digits only) or add RIMUHOSTING_APIKEY=xxxx to a ~/.rimuhosting file.')
-        headers = {
-            'Content-Type': 'application/x-www-form-urlencoded' if isinstance(data, str) else 'application/json',
-            'Accept': 'application/json'
-        }
         if not output:
            output = self
+        # pgb:jaxrssse: Select progress once here so every operation can accept SSE with JSON fallback.
+        if on_progress is None:
+            on_progress = self.on_progress
+        if on_progress is None and getattr(output, 'progress', self.progress):
+            on_progress = lambda message: print(message, file=sys.stderr, flush=True)
+        headers = {
+            'Content-Type': 'application/x-www-form-urlencoded' if isinstance(data, str) else 'application/json',
+            'Accept': 'application/json' if on_progress is None else 'text/event-stream, application/json;q=0.9'
+        }
         if not output.detail:
            output.detail = "short"
         if not output.output:
@@ -188,37 +276,51 @@ class Api:
             raise HumanReadableException("API calls are disabled (--is_disable_calls).")
         debug("__send_request_response>>>")
         prepped = s.prepare_request(req)
-        resp = s.send(prepped, timeout=(30, 3600), verify=self._is_ssl_verify)
+        try:
+            resp = s.send(prepped, timeout=(30, 3600), verify=self._is_ssl_verify,
+                          **({} if on_progress is None else {'stream': True}))
+        except RequestException as error:
+            if on_progress is not None:
+                raise HumanReadableException("Request connection failed. " + _OUTCOME_UNKNOWN) from error
+            raise
         debug("__send_request_result:ok:"+str(self._is_ssl_verify)+"/"+str(resp.ok)+":")
         debug("HTTP status:"+str( resp.status_code))
         debug("Content-Type:"+str(resp.headers.get("content-type")))
         debug("__send_request_response<<<")
 
-        if not resp.ok:
-            status = "HTTP %s %s" % (resp.status_code, resp.reason)
-            try:
-                error_response = resp.json()
-            except ValueError:
-                error_response = None
-            if isinstance(error_response, dict):
-                for result in [error_response] + list(error_response.values()):
-                    info = result.get('error_info') if isinstance(result, dict) else None
-                    if isinstance(info, dict) and isinstance(info.get('human_readable_message'), str) and info['human_readable_message']:
-                        raise HumanReadableException(status + ": " + info['human_readable_message'])
-            raise HumanReadableException(status)
+        try:
+            if not resp.ok:
+                try:
+                    error_response = resp.json()
+                except ValueError:
+                    error_response = None
+                raise _http_error(resp.status_code, resp.reason, error_response)
 
-        content_type = (resp.headers.get("content-type") or "").lower()
-        if "application/json" not in content_type:
-            raise HumanReadableException("HTTP %s %s: Expected an application/json response, got %s" %
-                                         (resp.status_code, resp.reason, content_type))
-
-        if output.output == "raw":
-            return resp.text
+            content_type = (resp.headers.get("content-type") or "").lower()
+            # pgb:jaxrssse: Feed the final SSE result through the normal raw/detail/JSONPath output path.
+            if on_progress is not None and content_type.split(';', 1)[0].strip() == 'text/event-stream':
+                raw_response, response_json = _read_progress(resp, on_progress, json_root)
+            else:
+                if "application/json" not in content_type:
+                    raise HumanReadableException("HTTP %s %s: Expected an application/json response, got %s" %
+                                                 (resp.status_code, resp.reason, content_type))
+                if output.output == "raw":
+                    return resp.text
+                response_json = resp.json()
+            if output.output == "raw":
+                return raw_response
+        except RequestException as error:
+            if on_progress is not None:
+                raise HumanReadableException("Progress connection failed. " + _OUTCOME_UNKNOWN) from error
+            raise
+        finally:
+            if on_progress is not None:
+                resp.close()
 
         if output.jsonpath is not None:
             jsonpath_query = output.jsonpath
 
-        resp = resp.json();
+        resp = response_json
         debug("output:" + " detail:" + str(output.detail) + " output: " + str(output.output)
                + " json_root: " + str(json_root) + " json_keys: " + str(list(json_keys))
               + " jsonpath_query: " + str(jsonpath_query) )
@@ -400,11 +502,12 @@ class Api:
                                 )
         return r
 
-    def create_snapshot(self, order_oid, label=None, output=None):
+    def create_snapshot(self, order_oid, label=None, output=None, on_progress=None):
+        # pgb:jaxrssse: A per-call callback joins the shared progress options when supplied.
         request = {} if label is None else {'backup_name': label}
         return self.__send_request('/r/orders/order-%s-na.com/vps/backups' % order_oid,
                                    data={'post_backup_request': request}, method='POST', output=output,
-                                   json_root='post_backup_response',
+                                   json_root='post_backup_response', on_progress=on_progress,
                                    json_keys=['backup_image', 'removed_disk_images', 'backup_messages',
                                               'running_vps_info', 'human_readable_message'],
                                    jsonpath_query='$..(backup_image, removed_disk_images, backup_messages, human_readable_message)')
