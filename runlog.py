@@ -178,6 +178,7 @@ class CommandRun:
         self.error = None
         self.human = False
         self.color = 'auto'
+        self.wrap = False
 
     def start(self, directory):
         if directory and self.log is None:

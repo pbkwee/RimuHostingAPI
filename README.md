@@ -50,6 +50,7 @@ Command-line options override the display defaults in the settings file:
 | `RIMUHOSTING_OUTPUT` | `'human'` | `--output json/flat/raw/human` |
 | `RIMUHOSTING_PROGRESS` | `True` | `--progress` or `--no-progress` |
 | `RIMUHOSTING_COLOR` | `'auto'` | `--color auto/always/never` |
+| `RIMUHOSTING_WRAP` | `False` | `--wrap` or `--no-wrap` |
 | `RIMUHOSTING_DETAIL` | `'short'` | `--detail minimal/short/full` |
 | `RIMUHOSTING_PRETTY` | `True` | `--is_pretty` or `--is_ugly` |
 
@@ -284,6 +285,8 @@ These options are available on all Python commands:
 | --- | --- |
 | `--output json` | Format the selected response as JSON; the default unless configured otherwise |
 | `--color auto/always/never` | Control colors in human output; defaults to auto |
+| `--wrap` | Wrap human output to fit the terminal |
+| `--no-wrap` | Keep human output rows on one line; the default |
 | `--output human` | Show a readable summary of the full result |
 | `--output flat` | Write the selected response as `field=value` lines |
 | `--output raw` | Write the original API JSON text; ignore detail and JSONPath selection |
@@ -305,9 +308,11 @@ python3 lsvms.py --detail minimal --jsonpath '$..order_oid' --is_ugly
 ```
 
 Use `--output human` for readable results, including operation messages and useful
-VM, disk-image, and pricing details. The layout adapts to your terminal and remains
-readable without color. Use `--output json` for scripts. Without an output setting,
-JSON remains the default; the example settings choose human output.
+VM, disk-image, and pricing details. Long rows stay on one line by default.
+Use `--wrap` to fit human results to the terminal, or `--no-wrap` to override
+configured wrapping. Your terminal may still visually wrap long lines.
+The layout remains readable without color. Use `--output json` for scripts.
+Without an output setting, JSON remains the default; the example settings choose human output.
 
 Colors follow your terminal theme. Use `--color never` to turn them off or
 `--color always` to force them on. Automatic color respects `NO_COLOR` and

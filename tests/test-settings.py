@@ -110,8 +110,8 @@ with tempfile.TemporaryDirectory(prefix='rimuapi-template-') as directory:
                                        'RIMUHOSTING_BASEURL': 'https://example.invalid'}):
             os.environ.pop('RIMUHOSTING_LOGDIR', None)
             api = rimuapi.Api()
-            assert (api.output, api.progress, api.color, api.detail, api.is_pretty) == (
-                'human', True, 'auto', 'short', True)
+            assert (api.output, api.progress, api.color, api.detail, api.is_pretty, api.wrap) == (
+                'human', True, 'auto', 'short', True, False)
             for environment, arguments, expected in (
                 ('', [], 'human'),
                 ('json', [], 'json'),
@@ -157,20 +157,36 @@ with tempfile.TemporaryDirectory(prefix='rimuapi-template-') as directory:
             settings_path = project / '.rimuhosting'
             template = settings_path.read_text()
             settings_path.write_text("RIMUHOSTING_OUTPUT = 'json'\nRIMUHOSTING_COLOR = 'never'\n"
-                "RIMUHOSTING_DETAIL = 'full'\nRIMUHOSTING_PRETTY = False\nRIMUHOSTING_PROGRESS = False\n")
+                "RIMUHOSTING_DETAIL = 'full'\nRIMUHOSTING_PRETTY = False\nRIMUHOSTING_PROGRESS = False\nRIMUHOSTING_WRAP = True\n")
             api = rimuapi.Api()
-            assert (api.output, api.progress, api.color, api.detail, api.is_pretty) == (
-                'json', False, 'never', 'full', False)
+            assert (api.output, api.progress, api.color, api.detail, api.is_pretty, api.wrap) == (
+                'json', False, 'never', 'full', False, True)
             parser = argparse.ArgumentParser()
             rimuapi._addOutputArgument(parser)
             options = parser.parse_args([])
-            assert (options.output, options.progress, options.color, options.detail, options.is_pretty) == (
-                'json', False, 'never', 'full', False)
+            assert (options.output, options.progress, options.color, options.detail, options.is_pretty, options.wrap) == (
+                'json', False, 'never', 'full', False, True)
             options = parser.parse_args(['--output', 'human', '--progress', '--color', 'always',
-                                         '--detail', 'minimal', '--is_pretty'])
-            assert (options.output, options.progress, options.color, options.detail, options.is_pretty) == (
-                'human', True, 'always', 'minimal', True)
+                                         '--detail', 'minimal', '--is_pretty', '--no-wrap'])
+            assert (options.output, options.progress, options.color, options.detail, options.is_pretty, options.wrap) == (
+                'human', True, 'always', 'minimal', True, False)
             settings_path.write_text(template)
+
+            # Wrapping is opt-in and does not discard any result text.
+            long_message = 'The requested operation completed successfully ' * 8 + 'END'
+            response._content = json.dumps({'get_orders_response': dict(body['get_orders_response'],
+                human_readable_message=long_message)}).encode()
+            for arguments, should_wrap in (([], False), (['--wrap'], True), (['--no-wrap'], False)):
+                session.send.reset_mock()
+                with patch.object(sys, 'argv', ['lsvms.py', '--output', 'human', '--color', 'never', *arguments]), \
+                        contextlib.redirect_stdout(io.StringIO()) as stdout:
+                    runpy.run_path(str(ROOT / 'lsvms.py'), run_name='__main__')
+                session.send.assert_called_once()
+                text = stdout.getvalue()
+                assert (long_message in text) == (not should_wrap)
+                assert 'END' in text
+                if should_wrap:
+                    assert all(len(line) <= 100 for line in text.splitlines())
 
             # Invalid defaults fail before any network call, and library callers may override them.
             with patch.dict(os.environ, {'RIMUHOSTING_OUTPUT': 'invalid'}):
@@ -194,8 +210,8 @@ with tempfile.TemporaryDirectory(prefix='rimuapi-template-') as directory:
                 assert api.output == 'human' and api._key is None
             (project / '.rimuhosting').unlink()
             api = rimuapi.Api(key='offline-template-key')
-            assert (api.output, api.progress, api.color, api.detail, api.is_pretty) == (
-                'json', False, 'auto', 'short', True)
+            assert (api.output, api.progress, api.color, api.detail, api.is_pretty, api.wrap) == (
+                'json', False, 'auto', 'short', True, False)
     finally:
         os.chdir(previous_directory)
 

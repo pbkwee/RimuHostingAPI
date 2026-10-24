@@ -15,12 +15,13 @@ def strip_color(text):
     return _SGR.sub('', text)
 
 
-def format_terminal(response, stream, color='auto'):
+def format_terminal(response, stream, color='auto', wrap=False):
     """Present human results using the destination's theme and available width."""
     terminal = stream.isatty()
     use_color = color == 'always' or (color == 'auto' and terminal and
                 not os.environ.get('NO_COLOR') and os.environ.get('TERM') != 'dumb')
-    width = min(100, max(20, shutil.get_terminal_size(fallback=(100, 24)).columns)) if terminal else 100
+    if wrap:
+        width = min(100, max(20, shutil.get_terminal_size(fallback=(100, 24)).columns)) if terminal else 100
     lines = format_human(response).splitlines()
     result = []
     for index, line in enumerate(lines):
@@ -30,8 +31,10 @@ def format_terminal(response, stream, color='auto'):
             result.append('')
         if row:
             line = '  - ' + line[2:]
-        wrapped = textwrap.wrap(line, width=width, subsequent_indent='    ' if row else '  ',
-                                break_long_words=False, break_on_hyphens=False)
+        wrapped = [line]
+        if wrap:
+            wrapped = textwrap.wrap(line, width=width, subsequent_indent='    ' if row else '  ',
+                                    break_long_words=False, break_on_hyphens=False)
         if use_color and wrapped and not row:
             label, separator, value = wrapped[0].partition(':')
             style = '1;36' if index == 0 else '1'

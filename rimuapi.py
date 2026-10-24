@@ -29,6 +29,8 @@ def _addOutputArgument(parser):
     parser.add_argument('--progress', action='store_true', help='Show live progress on stderr when the server supports it; otherwise use the normal response')
     parser.add_argument('--output', help='format of output', nargs='?', default='json', choices=OUTPUT_FORMATS)
     parser.add_argument('--color', default='auto', choices=('auto', 'always', 'never'), help='Human output colors: auto (default), always, or never')
+    parser.add_argument('--wrap', action='store_true', help='Wrap human output to fit the terminal')
+    parser.add_argument('--no-wrap', dest='wrap', action='store_false', help='Keep human output rows on one line (default)')
     parser.add_argument('--detail', help='amount of detail', nargs='?', default='short', choices=('minimal','short', 'full'))
     parser.add_argument('--is_pretty', help='pretty format json', action="store_true", default=True)
     parser.add_argument('--is_ugly', help='leaves json formatting', dest='is_pretty', action="store_false")
@@ -141,6 +143,7 @@ def _output_defaults(settings):
     return {
         'output': os.getenv('RIMUHOSTING_OUTPUT') or getattr(settings, 'RIMUHOSTING_OUTPUT', None) or 'json',
         'color': getattr(settings, 'RIMUHOSTING_COLOR', 'auto'),
+        'wrap': getattr(settings, 'RIMUHOSTING_WRAP', False),
         'detail': getattr(settings, 'RIMUHOSTING_DETAIL', 'short'),
         'is_pretty': getattr(settings, 'RIMUHOSTING_PRETTY', True),
         'progress': getattr(settings, 'RIMUHOSTING_PROGRESS', False),
@@ -181,7 +184,7 @@ def command():
                 traceback.print_exc()
             elif run.human and isinstance(getattr(error, 'response', None), (dict, list)):
                 print('Error: ' + str(error), file=sys.stderr)
-                print(format_terminal(error.response, sys.stderr, run.color), file=sys.stderr)
+                print(format_terminal(error.response, sys.stderr, run.color, wrap=run.wrap), file=sys.stderr)
             else:
                 print('Error: ' + str(error), file=sys.stderr)
             raise SystemExit(1) from None
@@ -275,6 +278,7 @@ class Api:
     debug = False
     output = 'json'
     color = 'auto'
+    wrap = False
     detail = 'short'
     is_pretty = True
     jsonpath = None
@@ -348,6 +352,7 @@ class Api:
         if command_run is not None:
             command_run.human = output.output == 'human'
             command_run.color = getattr(output, 'color', 'auto')
+            command_run.wrap = getattr(output, 'wrap', False)
         # pgb:jaxrssse: Select progress once here so every operation can accept SSE with JSON fallback.
         if on_progress is None:
             on_progress = self.on_progress
@@ -438,7 +443,7 @@ class Api:
                 resp.close()
 
         if output.output == 'human':
-            return format_terminal(response_json, sys.stdout, getattr(output, 'color', 'auto'))
+            return format_terminal(response_json, sys.stdout, getattr(output, 'color', 'auto'), wrap=getattr(output, 'wrap', False))
 
         if output.jsonpath is not None:
             jsonpath_query = output.jsonpath

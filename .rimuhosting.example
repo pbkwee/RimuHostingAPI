@@ -15,6 +15,9 @@ RIMUHOSTING_PROGRESS = True
 # Use terminal colors automatically. Override with --color never or always.
 RIMUHOSTING_COLOR = 'auto'
 
+# Keep long result rows on one line. Use --wrap to fit them to the terminal.
+RIMUHOSTING_WRAP = False
+
 # Standard result details. Override with --detail minimal or full.
 RIMUHOSTING_DETAIL = 'short'
 

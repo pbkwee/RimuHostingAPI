@@ -132,8 +132,8 @@ response = {'post_backup_response': {'status_code': 200, 'human_readable_message
     'error_info': {'human_readable_message': 'Example validation message'}}}
 with patch.dict(os.environ, {'TERM': 'xterm', 'NO_COLOR': ''}), \
         patch('outputformat.shutil.get_terminal_size', return_value=os.terminal_size((60, 24))):
-    plain = format_terminal(response, terminal, 'never')
-    styled = format_terminal(response, terminal)
+    plain = format_terminal(response, terminal, 'never', wrap=True)
+    styled = format_terminal(response, terminal, wrap=True)
     assert styled.startswith('\x1b[1;36mResults\x1b[0m\n')
     assert '\x1b[1;31mError\x1b[0m' in styled
     assert '\x1b[1;33mRemoved disk images\x1b[0m' in styled
@@ -141,6 +141,10 @@ with patch.dict(os.environ, {'TERM': 'xterm', 'NO_COLOR': ''}), \
     assert '\x1b' not in plain and '\x1b' not in format_terminal(response, pipe)
     assert '\n\nCreated backup: 1\n  - Image: ID=7;' in plain
     assert all(len(line) <= 60 for line in plain.splitlines())
+    unwrapped = format_terminal(response, terminal, 'never')
+    assert response['post_backup_response']['human_readable_message'] in unwrapped
+    assert any(len(line) > 60 for line in unwrapped.splitlines())
+    assert format_terminal(response, terminal, 'never', wrap=False) == unwrapped
     assert all(word in plain for word in ('backup.img', '2026-10-24T01:02:03Z', 'LOCAL'))
     assert '\x1b' in format_terminal(response, pipe, 'always')
     for setting in ({'NO_COLOR': '1'}, {'TERM': 'dumb'}):
@@ -149,10 +153,14 @@ with patch.dict(os.environ, {'TERM': 'xterm', 'NO_COLOR': ''}), \
             assert '\x1b' in format_terminal(response, terminal, 'always')
     # Hanging indents wrap text, but identifiers are never shortened to fit a terminal.
     with patch('outputformat.shutil.get_terminal_size', return_value=os.terminal_size((30, 24))):
-        assert '\n    ' in format_terminal([image], terminal, 'never')
-        assert 'x' * 150 in format_terminal([dict(image, file_name='x' * 150)], terminal, 'never')
+        assert '\n    ' in format_terminal([image], terminal, 'never', wrap=True)
+        assert 'x' * 150 in format_terminal([dict(image, file_name='x' * 150)], terminal, 'never', wrap=True)
     for columns in (0, 200):
         with patch('outputformat.shutil.get_terminal_size', return_value=os.terminal_size((columns, 24))):
-            assert 'Results' in format_terminal(response, terminal, 'never')
+            assert 'Results' in format_terminal(response, terminal, 'never', wrap=True)
+long_result = {'human_readable_message': 'A long result message ' * 20 + 'END'}
+assert long_result['human_readable_message'] in format_terminal(long_result, pipe, 'never')
+wrapped = format_terminal(long_result, pipe, 'never', wrap=True)
+assert all(len(line) <= 100 for line in wrapped.splitlines()) and wrapped.endswith('END')
 assert '\x1b' not in format_human(response)
 print('Human formatter and terminal presentation offline checks passed.')
