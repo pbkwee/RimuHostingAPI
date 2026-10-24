@@ -183,6 +183,12 @@ for script, options in [
     ("lsvms.py", ["--order_oid", "-1"]),
     ("vmctl.py", ["--order_oid", "1"]),
     ("vmctl.py", ["status", "--order_oid", "0"]),
+    ("mksnapshot.py", []),
+    ("mksnapshot.py", ["--order_oid", "0"]),
+    ("mksnapshot.py", ["--order_oid", "-1"]),
+    ("lsdiskimages.py", []),
+    ("lsdiskimages.py", ["--order_oid", "0"]),
+    ("lsdiskimages.py", ["--order_oid", "-1"]),
 ]:
     with patch.object(rimuapi, "Api") as clients, \
             patch.object(sys, "argv", [script] + options), contextlib.redirect_stderr(io.StringIO()):
@@ -271,5 +277,190 @@ for script, path, wrapper, field, rows in [
             assert request.method == "GET"
             assert request.url == "https://example.invalid" + path
             assert "Authorization" not in request.headers
+
+# Snapshot creation and disk listing share the existing transport and make one request each.
+images = [
+    {"optional_image_id": 11, "file_name": "root.img", "label": "Main <disk>",
+     "size_mb": 2048, "modified_time": {"unix_timestamp": 1900000000}, "location": "MAIN",
+     "volume_reference": "a1l-ssd", "device": "xvda1", "is_block_attached": True,
+     "is_listed_in_params_file": True, "is_boot_disk": True, "is_raw_device": True},
+    {"optional_image_id": 12, "file_name": "root.img", "label": "Before upgrade",
+     "size_mb": 2048, "modified_time": {"unix_timestamp": 1900000001}, "location": "BACKUPIMAGE",
+     "volume_reference": "b2f-ssd", "device": None, "is_block_attached": False,
+     "is_listed_in_params_file": False, "is_boot_disk": False, "is_raw_device": False},
+    {"optional_image_id": 13, "file_name": "cloned.img", "label": None,
+     "size_mb": 4096, "modified_time": None, "location": "CLONEDIMAGE"},
+    {"optional_image_id": 14, "file_name": "extra.img", "label": "Extra disk",
+     "size_mb": 8192, "modified_time": None, "location": "MISC"},
+]
+snapshot = {"post_backup_response": {
+    "backup_image": images[1], "removed_disk_images": [dict(images[1], optional_image_id=10, label="Older backup")],
+    "backup_messages": ["Backup completed"], "running_vps_info": {"disk_images": images},
+    "human_readable_message": "VM backup completed."}}
+listing = {"get_vps_status_response": {"running_vps_info": {"disk_images": images},
+                                       "human_readable_message": "Current VM status"}}
+with patch.object(rimuapi, "load_settings", return_value=None), \
+        patch.dict(os.environ, {"RIMUHOSTING_BASEURL": "https://example.invalid"}):
+    backup_api = rimuapi.Api(key="offline-snapshot-key")
+
+
+def format_options(detail="short", output="json", jsonpath=None):
+    return SimpleNamespace(detail=detail, output=output, jsonpath=jsonpath,
+                           is_pretty=False, is_disable_calls=False)
+
+
+def set_backup_response(body, status=200, reason="OK"):
+    response = requests.Response()
+    response.status_code, response.reason = status, reason
+    response.headers["content-type"] = "application/json"
+    response._content = json.dumps(body).encode()
+    response.json = Mock(wraps=response.json)
+    session.send.reset_mock()
+    session.send.side_effect = None
+    session.send.return_value = response
+    return response
+
+
+def assert_backup_request(method, suffix):
+    assert session.send.call_count == 1, "Backup operations must not perform lookups or retries"
+    request = session.send.call_args.args[0]
+    assert request.method == method
+    assert request.url == "https://example.invalid/r/orders/order-123456-na.com/vps" + suffix
+    assert request.headers["Authorization"] == "rimuhosting apikey=offline-snapshot-key"
+    assert session.send.call_args.kwargs["timeout"] == (30, 3600)
+    assert session.send.call_args.kwargs["verify"] is True
+    return request
+
+
+session = Mock()
+session.prepare_request.side_effect = lambda request: request.prepare()
+with patch.object(rimuapi, "Session", return_value=session):
+    for label in (None, "", 'Before <upgrade> & "check" $(echo literal)'):
+        response = set_backup_response(snapshot)
+        result = json.loads(backup_api.create_snapshot(123456, label))
+        assert result == {"result": snapshot["post_backup_response"]}
+        request = assert_backup_request("POST", "/backups")
+        assert json.loads(request.body) == {"post_backup_request": {} if label is None else {"backup_name": label}}
+        response.json.assert_called_once_with()
+
+    for detail in ("minimal", "full"):
+        set_backup_response(snapshot)
+        result = json.loads(backup_api.create_snapshot(123456, output=format_options(detail)))
+        expected = snapshot if detail == "full" else {
+            key: value for key, value in snapshot["post_backup_response"].items() if key != "running_vps_info"}
+        assert result == expected
+        assert_backup_request("POST", "/backups")
+    response = set_backup_response(snapshot)
+    assert backup_api.create_snapshot(123456, output=format_options(output="raw")) == response.text
+    response.json.assert_not_called()
+    set_backup_response(snapshot)
+    result = backup_api.create_snapshot(123456, output=format_options(output="flat"))
+    assert 'result.removed_disk_images.[0].label=Older backup' in result
+    set_backup_response(snapshot)
+    result = json.loads(backup_api.create_snapshot(
+        123456, output=format_options("minimal", jsonpath="$.removed_disk_images")))
+    assert result == {"removed_disk_images": snapshot["post_backup_response"]["removed_disk_images"]}
+
+    summary_fields = {"optional_image_id", "file_name", "label", "size_mb", "modified_time", "location"}
+    for inventory in (images, []):
+        body = deepcopy(listing)
+        body["get_vps_status_response"]["running_vps_info"]["disk_images"] = inventory
+        for detail in ("short", "minimal", "full"):
+            response = set_backup_response(body)
+            result = json.loads(backup_api.disk_images(123456, output=format_options(detail)))
+            expected = body if detail == "full" else inventory if detail == "short" else [
+                {key: value for key, value in image.items() if key in summary_fields} for image in inventory]
+            assert result == expected, result
+            response.json.assert_called_once_with()
+            assert_backup_request("GET", "")
+        for detail in ("short", "minimal"):
+            set_backup_response(body)
+            result = backup_api.disk_images(123456, output=format_options(detail, "flat"))
+            if inventory:
+                assert '[0].optional_image_id=11' in result
+            else:
+                assert result == "[]"
+        response = set_backup_response(body)
+        assert backup_api.disk_images(123456, output=format_options("minimal", "raw")) == response.text
+        response.json.assert_not_called()
+    set_backup_response(listing)
+    result = json.loads(backup_api.disk_images(123456, output=format_options("minimal", jsonpath="$[*].optional_image_id")))
+    assert result == [{"optional_image_id": image["optional_image_id"]} for image in images]
+
+    unavailable = [{"get_vps_status_response": info} for info in (
+        {}, {"running_vps_info": None}, {"running_vps_info": {}},
+        {"running_vps_info": {"disk_images": None}})]
+    for body in unavailable + [{}, {"get_vps_status_response": None}, None, [], "unexpected"]:
+        for detail in ("short", "minimal"):
+            for output in ("json", "flat"):
+                set_backup_response(body)
+                try:
+                    backup_api.disk_images(123456, output=format_options(detail, output))
+                except rimuapi.HumanReadableException as error:
+                    assert "inventory is unavailable" in str(error)
+                else:
+                    raise AssertionError("Missing inventory was presented as a successful empty list")
+                assert_backup_request("GET", "")
+        for options in (format_options("full"), format_options(output="raw")):
+            set_backup_response(body)
+            assert json.loads(backup_api.disk_images(123456, output=options)) == body
+
+    for script, body, method, suffix, extra in [
+        ("mksnapshot.py", snapshot, "POST", "/backups", []),
+        ("mksnapshot.py", snapshot, "POST", "/backups", ["--label", "Before upgrade"]),
+        ("lsdiskimages.py", listing, "GET", "", []),
+    ]:
+        for options in ([], ["--detail", "minimal"], ["--detail", "full"],
+                        ["--output", "flat"], ["--output", "raw"], ["--is_ugly"],
+                        ["--detail", "minimal", "--jsonpath", "$"]):
+            set_backup_response(body)
+            with patch.object(rimuapi, "Api", return_value=backup_api), \
+                    patch.object(sys, "argv", [script, "--order_oid", "123456"] + extra + options), \
+                    contextlib.redirect_stdout(io.StringIO()) as output:
+                runpy.run_path(str(root / script), run_name="__main__")
+            assert output.getvalue().strip() and output.getvalue().strip() != "None"
+            request = assert_backup_request(method, suffix)
+            if method == "POST":
+                assert json.loads(request.body)["post_backup_request"] == ({"backup_name": "Before upgrade"} if extra else {})
+        session.send.reset_mock()
+        with patch.object(rimuapi, "Api", return_value=backup_api), \
+                patch.object(sys, "argv", [script, "--order_oid", "123456", "--is_disable_calls"]):
+            try:
+                runpy.run_path(str(root / script), run_name="__main__")
+            except rimuapi.HumanReadableException as error:
+                assert "disabled" in str(error).lower()
+            else:
+                raise AssertionError("Disabled CLI call was sent")
+            session.send.assert_not_called()
+
+    for operation in (backup_api.create_snapshot, backup_api.disk_images):
+        for status, reason, message in [(429, "Too Many Requests", "Please wait one hour"),
+                                        (500, "Internal Server Error", "Backup result could not be verified")]:
+            set_backup_response({"post_backup_response": {"error_info": {"human_readable_message": message}}}, status, reason)
+            try:
+                operation(123456)
+            except rimuapi.HumanReadableException as error:
+                assert str(error) == "HTTP %s %s: %s" % (status, reason, message)
+            else:
+                raise AssertionError("Backup HTTP error hidden")
+            assert session.send.call_count == 1
+        session.send.reset_mock()
+        session.send.side_effect = requests.exceptions.ReadTimeout("offline timeout")
+        try:
+            operation(123456)
+        except requests.exceptions.ReadTimeout:
+            pass
+        else:
+            raise AssertionError("Read timeout hidden")
+        assert session.send.call_count == 1
+        disabled = format_options(); disabled.is_disable_calls = True
+        session.send.reset_mock()
+        try:
+            operation(123456, output=disabled)
+        except rimuapi.HumanReadableException as error:
+            assert "disabled" in str(error).lower()
+        else:
+            raise AssertionError("Disabled backup call was sent")
+        session.send.assert_not_called()
 
 print("API and CLI regression checks passed (no live API calls).")

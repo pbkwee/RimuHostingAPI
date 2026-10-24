@@ -121,6 +121,7 @@ class Api:
     is_disable_calls = False
 
     simplified_order_json = '$..(pings_ok, running_state, deployed_state, order_description, amt_usd, order_oid, domain_name, primary_ip, human_readable_message, data_center_location_code, data_center_location_name)'
+    simplified_disk_image_json = '$..(optional_image_id, file_name, label, size_mb, modified_time, location)'
 
     def __init__(self, key=None):
         global isDebug
@@ -152,6 +153,7 @@ class Api:
     def __send_request(self, url, data=None, method='GET', isKeyRequired=True, output = None
                        , json_root = None, json_keys = None
                        , jsonpath_query = None
+                       , json_select = None
                        ):
         if isKeyRequired and not self._key:
             raise Exception('API Key is required.  Get the API key from http://rimuhosting.com/cp/apikeys.jsp.  Then export RIMUHOSTING_APIKEY=xxxx (the digits only) or add RIMUHOSTING_APIKEY=xxxx to a ~/.rimuhosting file.')
@@ -221,18 +223,24 @@ class Api:
                + " json_root: " + str(json_root) + " json_keys: " + str(list(json_keys))
               + " jsonpath_query: " + str(jsonpath_query) )
         if output.detail != "full" and json_root is not None:
-            if json_root in resp:
+            if (json_select is None or isinstance(resp, dict)) and json_root in resp:
                 resp = resp[json_root]
             else:
                 resp = {}
                 debug('no json_root in response for ' + json_root)
             debug("output: json_root node " + json_root + ("(no value found)" if resp is None else ""))
 
+        if output.detail != "full" and json_select is not None:
+            for key in json_select:
+                resp = resp.get(key) if isinstance(resp, dict) else None
+            if not isinstance(resp, list):
+                raise HumanReadableException("Disk image inventory is unavailable. Refresh VM status and list the images again.")
+
         if jsonpath_query is not None and output.detail == "minimal":
             from jsonpath_ng import parse
             debug("jsonpath_query  " + str(jsonpath_query))
             jsonpath_expr = parse(jsonpath_query)
-            t={}
+            t = [] if isinstance(resp, list) else {}
             for match in jsonpath_expr.find(resp):
                 t = match.full_path.update_or_create(t, match.value)
             resp = t
@@ -260,6 +268,8 @@ class Api:
             return json.dumps(resp, indent=4 if output.is_pretty else None)
 
         if output.output == "flat":
+            if resp == []:
+                return "[]"
             debug("output: flatten")
             resp = _flattenJSON(resp)
 
@@ -389,6 +399,21 @@ class Api:
                                 , jsonpath_query = self.simplified_order_json
                                 )
         return r
+
+    def create_snapshot(self, order_oid, label=None, output=None):
+        request = {} if label is None else {'backup_name': label}
+        return self.__send_request('/r/orders/order-%s-na.com/vps/backups' % order_oid,
+                                   data={'post_backup_request': request}, method='POST', output=output,
+                                   json_root='post_backup_response',
+                                   json_keys=['backup_image', 'removed_disk_images', 'backup_messages',
+                                              'running_vps_info', 'human_readable_message'],
+                                   jsonpath_query='$..(backup_image, removed_disk_images, backup_messages, human_readable_message)')
+
+    def disk_images(self, order_oid, output=None):
+        return self.__send_request('/r/orders/order-%s-na.com/vps' % order_oid, output=output,
+                                   json_root='get_vps_status_response', json_keys=[],
+                                   json_select=('running_vps_info', 'disk_images'),
+                                   jsonpath_query=self.simplified_disk_image_json)
 
     # check status
     def status(self, domain, order_oid, output = None):

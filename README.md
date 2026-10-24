@@ -1,8 +1,8 @@
 # RimuHosting API
 
 A Python library and command-line tools for the RimuHosting server management API.
-The tools list VMs, quote pricing, create or reinstall VMs, change resources,
-control VM state, cancel VMs, and update reverse DNS.
+The tools list VMs and disk images, create saved root-disk backups, quote pricing,
+create or reinstall VMs, change resources, control VM state, cancel VMs, and update reverse DNS.
 
 ## Install
 
@@ -53,6 +53,8 @@ Replace `123456` with a VM order ID from `lsvms.py`.
 | `lsdcs.py` | List data center locations enabled for new shared VPS setups |
 | `lsvms.py` | List VMs and find order IDs |
 | `vmctl.py` | Start, stop, restart, or read VM status and order information |
+| `mksnapshot.py` | Create a saved root-disk backup and wait for the result |
+| `lsdiskimages.py` | List available disk images, including mounted images and backups |
 | `pricing.py` | Quote pricing without creating or reinstalling a VM |
 | `mkvm.py` | Create a VM or reinstall an existing VM |
 | `chattrvm.py` | Change VM memory or disk sizes |
@@ -105,6 +107,47 @@ python3 vmctl.py start --order_oid 123456
 python3 vmctl.py stop --order_oid 123456
 python3 vmctl.py restart --order_oid 123456
 ```
+
+### Create a snapshot and list disk images
+
+```sh
+python3 mksnapshot.py --order_oid 123456 --label 'Before upgrade'
+python3 lsdiskimages.py --order_oid 123456
+python3 lsdiskimages.py --order_oid 123456 --detail minimal
+```
+
+`mksnapshot.py` creates a saved backup of the VM's root disk. The backup does not
+include RAM or all VM disks. The command sends one `POST /r/orders/order-ID-na.com/vps/backups`
+request and waits for completion. An omitted label uses the server's default label.
+Manual-backup retention can remove an older image before the new backup completes.
+Shared hosts permit one manual backup per VM each hour, based on retained images.
+
+The default snapshot output includes `backup_image`, `removed_disk_images`,
+`backup_messages`, `running_vps_info`, and `human_readable_message` under `result`.
+`removed_disk_images` describes confirmed removals reported by hosts that support
+the removal records. An empty list does not prove that an older host removed no images.
+
+`lsdiskimages.py` sends one `GET /r/orders/order-ID-na.com/vps` request.
+The status response can reuse inventory up to five minutes old.
+Extracting the disk images adds no extra host request.
+The server selects usable disk images, including mounted images and backups.
+The default output is the image array with all available metadata.
+`--detail minimal` selects each image's ID (`optional_image_id`), filename, label,
+size, modification time, and location. `--jsonpath` expressions for minimal output
+start at this image array:
+
+```sh
+python3 lsdiskimages.py --order_oid 123456 --detail minimal --jsonpath '$[*].optional_image_id'
+```
+
+An empty image array means that inventory loaded with no images.
+Missing or unavailable inventory raises an error in short and minimal output.
+`--detail full` and `--output raw` retain the original server response for inspection.
+
+Both commands use the existing 30-second connection and one-hour read timeouts.
+The client does not retry requests. A timeout does not cancel a running backup.
+If a backup request times out or fails after starting, refresh the image listing
+and VM status before requesting another backup.
 
 ### Configure and quote a VM
 
@@ -256,6 +299,8 @@ from rimuapi import Api
 
 api = Api()  # Uses the same environment variables and settings file.
 print(api.orders())
+print(api.create_snapshot(123456, label='Before upgrade'))
+print(api.disk_images(123456))
 ```
 
 The default return value is formatted JSON text. Set `api.detail`, `api.output`,
