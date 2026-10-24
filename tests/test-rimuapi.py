@@ -1,4 +1,5 @@
-"""Run with python3 test-rimuapi.py; HTTP transport and shell commands are mocked."""
+"""Run with python3 tests/test-rimuapi.py; HTTP transport and shell commands are mocked."""
+from offline import ROOT
 import contextlib
 from copy import deepcopy
 import io
@@ -17,7 +18,7 @@ import requests
 import rimuapi
 import mkvm
 
-root = Path(__file__).resolve().parent
+root = ROOT
 with patch.object(rimuapi, "load_settings", return_value=None), \
         patch.dict(os.environ, {"RIMUHOSTING_BASEURL": ""}):
     api = rimuapi.Api(key="offline-test")
@@ -424,11 +425,15 @@ with patch.object(rimuapi, "Session", return_value=session):
                 assert json.loads(request.body)["post_backup_request"] == ({"backup_name": "Before upgrade"} if extra else {})
         session.send.reset_mock()
         with patch.object(rimuapi, "Api", return_value=backup_api), \
-                patch.object(sys, "argv", [script, "--order_oid", "123456", "--is_disable_calls"]):
+                patch.object(sys, "argv", [script, "--order_oid", "123456", "--is_disable_calls"]), \
+                contextlib.redirect_stderr(io.StringIO()) as stderr:
             try:
                 runpy.run_path(str(root / script), run_name="__main__")
-            except rimuapi.HumanReadableException as error:
-                assert "disabled" in str(error).lower()
+            except SystemExit as error:
+                assert error.code == 1
+                assert "disabled" in stderr.getvalue().lower()
+                assert stderr.getvalue().startswith("Error: ")
+                assert "Traceback" not in stderr.getvalue()
             else:
                 raise AssertionError("Disabled CLI call was sent")
             session.send.assert_not_called()

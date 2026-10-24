@@ -20,7 +20,7 @@ setup(name=NAME,
               author_email='p.misc2@rimuhosting.com',
               url=GITHUB_URL,
               license='GPLv3+',
-              py_modules=['rimuapi'],
+              py_modules=['rimuapi', 'outputformat', 'runlog'],
       classifiers=[
         'Development Status :: 4 - Beta',
         'Environment :: Console',

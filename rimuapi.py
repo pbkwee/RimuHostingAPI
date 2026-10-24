@@ -3,12 +3,19 @@ import urllib.parse
 import os
 import argparse
 import sys
+from contextlib import contextmanager
+import traceback
 from copy import deepcopy
 from http.client import responses as http_reasons
 from requests import Request, Session
 from requests.exceptions import RequestException
+from requests.utils import stream_decode_response_unicode
+import runlog
+from outputformat import format_terminal
 
 import json
+
+OUTPUT_FORMATS = ('raw', 'json', 'flat', 'human')
 
 isDebug=False
 def debug(debugMsg):
@@ -18,13 +25,16 @@ def debug(debugMsg):
 def _addOutputArgument(parser):
     parser.add_argument("--debug", action="store_true", help="Show debug logging")
     # pgb:jaxrssse: Shared opt-in flag; endpoints may still return their normal JSON response.
+    parser.add_argument('--no-progress', dest='progress', action='store_false', help='Disable live progress for this command')
     parser.add_argument('--progress', action='store_true', help='Show live progress on stderr when the server supports it; otherwise use the normal response')
-    parser.add_argument('--output', help='format of output', nargs='?', default='json', choices=('raw', 'json', 'flat'))
+    parser.add_argument('--output', help='format of output', nargs='?', default='json', choices=OUTPUT_FORMATS)
+    parser.add_argument('--color', default='auto', choices=('auto', 'always', 'never'), help='Human output colors: auto (default), always, or never')
     parser.add_argument('--detail', help='amount of detail', nargs='?', default='short', choices=('minimal','short', 'full'))
     parser.add_argument('--is_pretty', help='pretty format json', action="store_true", default=True)
     parser.add_argument('--is_ugly', help='leaves json formatting', dest='is_pretty', action="store_false")
     parser.add_argument('--jsonpath', help='only output these fields using an jsonpath query')
     parser.add_argument('--is_disable_calls', help='throw an exception rather than making a call', action="store_true", default = False)
+    parser.set_defaults(**_output_defaults(_settings_for_run()))
 
 def positive_int(value):
     value = int(value)
@@ -63,7 +73,7 @@ def load_settings(name, path=None):
     path = path or os.getenv('PATH')
     home_dir = os.path.expanduser('~')
     dirs = path.split(os.pathsep)
-    dirs.insert(0, home_dir)
+    dirs[0:0] = [os.getcwd(), home_dir]
     for d in dirs:
         bin_path = os.path.join(d, name)
         if os.path.exists(bin_path):
@@ -112,7 +122,69 @@ def _flattenJSON(y):
     return out
 
 class HumanReadableException(Exception):
-    pass
+    def __init__(self, message, response=None):
+        super().__init__(message)
+        self.response = response
+
+
+def _settings_for_run():
+    run = runlog.current_command()
+    if run is not None and run.settings_loaded:
+        return run.settings
+    settings = load_settings('.rimuhosting')
+    if run is not None:
+        run.settings, run.settings_loaded = settings, True
+    return settings
+
+
+def _output_defaults(settings):
+    return {
+        'output': os.getenv('RIMUHOSTING_OUTPUT') or getattr(settings, 'RIMUHOSTING_OUTPUT', None) or 'json',
+        'color': getattr(settings, 'RIMUHOSTING_COLOR', 'auto'),
+        'detail': getattr(settings, 'RIMUHOSTING_DETAIL', 'short'),
+        'is_pretty': getattr(settings, 'RIMUHOSTING_PRETTY', True),
+        'progress': getattr(settings, 'RIMUHOSTING_PROGRESS', False),
+    }
+
+
+def _log_directory(settings):
+    if 'RIMUHOSTING_LOGDIR' in os.environ:
+        return os.environ['RIMUHOSTING_LOGDIR'] or None
+    return getattr(settings, 'RIMUHOSTING_LOGDIR', None) if settings else None
+
+
+@contextmanager
+def command():
+    """Handle expected CLI failures and closed pipes without changing library exceptions."""
+    global isDebug
+    with runlog.command_run() as run:
+        try:
+            settings = _settings_for_run() if 'RIMUHOSTING_LOGDIR' not in os.environ else None
+            if settings and hasattr(settings, 'IS_DEBUG'):
+                isDebug = settings.IS_DEBUG
+            try:
+                run.start(_log_directory(settings))
+            except OSError as error:
+                raise HumanReadableException('Cannot create the run log directory; no API request was sent.') from error
+            yield
+            sys.stdout.flush()
+        except BrokenPipeError:
+            # Stop Python's shutdown flush from reporting a second error after a pager closes.
+            try:
+                with open(os.devnull, 'w') as sink:
+                    os.dup2(sink.fileno(), sys.stdout.fileno())
+            except (OSError, ValueError):
+                pass
+        except (HumanReadableException, RequestException) as error:
+            run.error = str(error)
+            if isDebug:
+                traceback.print_exc()
+            elif run.human and isinstance(getattr(error, 'response', None), (dict, list)):
+                print('Error: ' + str(error), file=sys.stderr)
+                print(format_terminal(error.response, sys.stderr, run.color), file=sys.stderr)
+            else:
+                print('Error: ' + str(error), file=sys.stderr)
+            raise SystemExit(1) from None
 
 def _http_error(status_code, reason, body):
     # pgb:jaxrssse: Share error reporting between HTTP failures and final in-stream statuses.
@@ -121,17 +193,20 @@ def _http_error(status_code, reason, body):
         for result in [body] + list(body.values()):
             info = result.get('error_info') if isinstance(result, dict) else None
             if isinstance(info, dict) and isinstance(info.get('human_readable_message'), str) and info['human_readable_message']:
-                return HumanReadableException(status + ": " + info['human_readable_message'])
-    return HumanReadableException(status)
+                return HumanReadableException(status + ": " + info['human_readable_message'], body)
+    return HumanReadableException(status, body)
 
 
-def _sse_events(response):
+def _sse_events(response, request_log=None):
     # pgb:jaxrssse: Decode SSE framing before applying the existing JSON response handling.
     # SSE: event: progress\ndata: {"message":"Copying"}\n\n -> ("progress", '{"message":"Copying"}').
     # Multiple data: lines join with \n; comments are heartbeats. CR, LF and CRLF end lines.
     response.encoding = 'utf-8-sig'
     event, data, line, was_cr = 'message', [], [], False
-    for chunk in response.iter_content(chunk_size=1, decode_unicode=True):
+    chunks = response.iter_content(chunk_size=1)
+    if request_log is not None:
+        chunks = request_log.capture(chunks)
+    for chunk in stream_decode_response_unicode(chunks, response):
         for character in chunk:
             if character == '\n' and was_cr:
                 was_cr = False
@@ -159,17 +234,19 @@ def _sse_events(response):
 _OUTCOME_UNKNOWN = "Request outcome is unknown. Check the operation status before repeating the request."
 
 
-def _read_progress(response, on_progress, json_root):
+def _read_progress(response, on_progress, json_root, request_log=None):
     # pgb:jaxrssse: Only the endpoint's final result establishes its outcome; EOF alone does not.
     # result data is the existing JSON envelope, e.g.
     # {"post_backup_response":{"status_code":200,"response_type":"OK","backup_messages":["Done"]}}.
-    for event, text in _sse_events(response):
+    for event, text in _sse_events(response, request_log):
         if event not in ('status', 'progress', 'result'):
             continue
         try:
             body = json.loads(text)
         except ValueError as error:
             raise HumanReadableException("Invalid progress JSON. " + _OUTCOME_UNKNOWN) from error
+        if event == 'result' and request_log is not None:
+            request_log.result(body)
         if not isinstance(body, dict):
             raise HumanReadableException("Invalid progress event. " + _OUTCOME_UNKNOWN)
         if event == 'result':
@@ -186,6 +263,8 @@ def _read_progress(response, on_progress, json_root):
         message = body.get('message' if event == 'progress' else 'human_readable_message')
         if not isinstance(message, str):
             raise HumanReadableException("Invalid progress message. " + _OUTCOME_UNKNOWN)
+        if request_log is not None:
+            request_log.progress(message)
         on_progress(message)
     raise HumanReadableException("Progress stream ended without a final result. " + _OUTCOME_UNKNOWN)
 
@@ -195,6 +274,7 @@ class Api:
     # Show debug logging
     debug = False
     output = 'json'
+    color = 'auto'
     detail = 'short'
     is_pretty = True
     jsonpath = None
@@ -214,18 +294,20 @@ class Api:
 
         if not self._key:
             self._key = os.getenv('RIMUHOSTING_APIKEY', None)
-        settings = load_settings('.rimuhosting')
+        settings = _settings_for_run()
+        self.log_dir = _log_directory(settings)
+        self.__dict__.update(_output_defaults(settings))
         if settings:
             if not self._key:
-                self._key = settings.RIMUHOSTING_APIKEY
+                self._key = getattr(settings, 'RIMUHOSTING_APIKEY', None)
             if hasattr(settings, "IS_DEBUG"):
-                isDebug = settings.IS_DEBUG
+                isDebug = (isDebug or settings.IS_DEBUG) if runlog.current_command() else settings.IS_DEBUG
                 if isDebug:
                     debug("Debug enabled per IS_DEBUG setting in .rimuhosting settings file.")
             if hasattr(settings, "RIMUHOSTING_BASEURL"):
                 self._base_url = settings.RIMUHOSTING_BASEURL
                 if isDebug:
-                    debug("Base url set per RIMUHOSTING_BASEURL setting in .rimuhosting settings file to " + str(self._base_url))
+                    debug("Base url set per RIMUHOSTING_BASEURL setting in .rimuhosting settings file to " + runlog.safe_url(self._base_url))
             if hasattr(settings, "RIMUHOSTING_ISVERIFYSSL"):
                 self._is_ssl_verify = settings.RIMUHOSTING_ISVERIFYSSL
                 if isDebug:
@@ -238,10 +320,34 @@ class Api:
                        , jsonpath_query = None
                        , json_select = None, on_progress = None
                        ):
+        try:
+            log = runlog.request_log(self.log_dir, method, self._base_url + url, json_root)
+        except OSError as error:
+            raise HumanReadableException('Cannot create the run log files; no API request was sent.') from error
+        failure = None
+        try:
+            return self.__perform_request(url, data, method, isKeyRequired, output,
+                                          json_root, json_keys, jsonpath_query, json_select, on_progress, log)
+        except BaseException as error:
+            failure = error
+            raise
+        finally:
+            if log is not None:
+                log.finish(failure)
+
+    def __perform_request(self, url, data=None, method='GET', isKeyRequired=True, output = None
+                       , json_root = None, json_keys = None
+                       , jsonpath_query = None
+                       , json_select = None, on_progress = None, request_log = None
+                       ):
         if isKeyRequired and not self._key:
-            raise Exception('API Key is required.  Get the API key from http://rimuhosting.com/cp/apikeys.jsp.  Then export RIMUHOSTING_APIKEY=xxxx (the digits only) or add RIMUHOSTING_APIKEY=xxxx to a ~/.rimuhosting file.')
+            raise HumanReadableException('API Key is required.  Get the API key from http://rimuhosting.com/cp/apikeys.jsp.  Then export RIMUHOSTING_APIKEY=xxxx (the digits only) or add RIMUHOSTING_APIKEY=xxxx to a ~/.rimuhosting file.')
         if not output:
            output = self
+        command_run = runlog.current_command()
+        if command_run is not None:
+            command_run.human = output.output == 'human'
+            command_run.color = getattr(output, 'color', 'auto')
         # pgb:jaxrssse: Select progress once here so every operation can accept SSE with JSON fallback.
         if on_progress is None:
             on_progress = self.on_progress
@@ -255,6 +361,8 @@ class Api:
            output.detail = "short"
         if not output.output:
            output.output = "raw"
+        if output.output not in OUTPUT_FORMATS:
+            raise HumanReadableException('Invalid output format. Set RIMUHOSTING_OUTPUT or --output to json, raw, flat, or human.')
         if not output.is_disable_calls:
            output.is_disable_calls = False
 
@@ -271,7 +379,7 @@ class Api:
                       data=data,
                       headers=headers
                       )
-        debug("HTTP request: " + method + " " + str(url))
+        debug("HTTP request: " + method + " " + runlog.safe_url(url))
         if output.is_disable_calls:
             raise HumanReadableException("API calls are disabled (--is_disable_calls).")
         debug("__send_request_response>>>")
@@ -288,25 +396,37 @@ class Api:
         debug("Content-Type:"+str(resp.headers.get("content-type")))
         debug("__send_request_response<<<")
 
+        content_type = (resp.headers.get("content-type") or "").lower()
+        streaming = on_progress is not None and content_type.split(';', 1)[0].strip() == 'text/event-stream' and resp.ok
         try:
+            if request_log is not None:
+                request_log.response(resp, streaming)
             if not resp.ok:
                 try:
                     error_response = resp.json()
+                    if request_log is not None:
+                        request_log.result(error_response)
                 except ValueError:
                     error_response = None
                 raise _http_error(resp.status_code, resp.reason, error_response)
 
-            content_type = (resp.headers.get("content-type") or "").lower()
             # pgb:jaxrssse: Feed the final SSE result through the normal raw/detail/JSONPath output path.
             if on_progress is not None and content_type.split(';', 1)[0].strip() == 'text/event-stream':
-                raw_response, response_json = _read_progress(resp, on_progress, json_root)
+                raw_response, response_json = _read_progress(resp, on_progress, json_root, request_log)
             else:
                 if "application/json" not in content_type:
                     raise HumanReadableException("HTTP %s %s: Expected an application/json response, got %s" %
                                                  (resp.status_code, resp.reason, content_type))
                 if output.output == "raw":
+                    if request_log is not None:
+                        try:
+                            request_log.result(json.loads(resp.text))
+                        except ValueError:
+                            pass
                     return resp.text
                 response_json = resp.json()
+                if request_log is not None:
+                    request_log.result(response_json)
             if output.output == "raw":
                 return raw_response
         except RequestException as error:
@@ -316,6 +436,9 @@ class Api:
         finally:
             if on_progress is not None:
                 resp.close()
+
+        if output.output == 'human':
+            return format_terminal(response_json, sys.stdout, getattr(output, 'color', 'auto'))
 
         if output.jsonpath is not None:
             jsonpath_query = output.jsonpath

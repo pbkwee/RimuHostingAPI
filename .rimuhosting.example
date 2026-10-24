@@ -1,0 +1,33 @@
+# Copy this file to .rimuhosting in the project directory, then edit the values.
+# This settings file uses Python syntax; do not source it in a shell.
+
+# Get your API key at https://rimuhosting.com/cp/apikeys.jsp and enter its digits.
+# Leave empty if you export RIMUHOSTING_APIKEY or only use public catalogs.
+RIMUHOSTING_APIKEY = ''
+
+# Readable results by default. Use --output json when another program reads them.
+# Choices: human, json, flat, raw. Command-line options override this setting.
+RIMUHOSTING_OUTPUT = 'human'
+
+# Show progress when available. Use --no-progress for a quiet run.
+RIMUHOSTING_PROGRESS = True
+
+# Use terminal colors automatically. Override with --color never or always.
+RIMUHOSTING_COLOR = 'auto'
+
+# Standard result details. Override with --detail minimal or full.
+RIMUHOSTING_DETAIL = 'short'
+
+# Indent JSON for readability. Use --is_ugly for compact JSON.
+RIMUHOSTING_PRETTY = True
+
+# Keep diagnostics quiet. Use --debug when troubleshooting.
+IS_DEBUG = False
+
+# Save each run in ./runlogs, relative to the folder where you run the command.
+# Set to None or comment out this line to disable logging.
+RIMUHOSTING_LOGDIR = './runlogs'
+
+# Optional settings: uncomment to use them.
+# RIMUHOSTING_BASEURL = 'https://rimuhosting.com'
+# RIMUHOSTING_ISVERIFYSSL = True  # Keep certificate verification enabled.

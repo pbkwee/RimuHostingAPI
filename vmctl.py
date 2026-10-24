@@ -15,19 +15,20 @@ class Args(object):
           rimuapi.isDebug = self.debug;
 
 if __name__ == '__main__':
-    args = Args()
-    rimuapi.debug("action = " + str(args.action))
-    xx = rimuapi.Api()
-    if args.action == 'start':
-        resp = xx.start("na.com", args.order_oid, output = args)
-    elif args.action == 'stop':
-        resp = xx.stop("na.com", args.order_oid, output = args)
-    elif args.action == 'restart':
-        resp = xx.reboot("na.com", args.order_oid, output = args)
-    elif args.action == 'status':
-        resp = xx.status("na.com", args.order_oid, output = args)
-    elif args.action == 'info':
-        resp = xx.info("na.com", args.order_oid, output = args)
-    else:
-        raise Exception("Unrecognized action.")
-    print(resp)
+    with rimuapi.command():
+        args = Args()
+        rimuapi.debug("action = " + str(args.action))
+        xx = rimuapi.Api()
+        if args.action == 'start':
+            resp = xx.start("na.com", args.order_oid, output = args)
+        elif args.action == 'stop':
+            resp = xx.stop("na.com", args.order_oid, output = args)
+        elif args.action == 'restart':
+            resp = xx.reboot("na.com", args.order_oid, output = args)
+        elif args.action == 'status':
+            resp = xx.status("na.com", args.order_oid, output = args)
+        elif args.action == 'info':
+            resp = xx.info("na.com", args.order_oid, output = args)
+        else:
+            raise Exception("Unrecognized action.")
+        print(resp)

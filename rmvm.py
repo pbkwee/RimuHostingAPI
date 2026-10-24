@@ -14,7 +14,8 @@ class Args(object):
             rimuapi.isDebug = self.debug;
 
 if __name__ == '__main__':
-    args = Args()
-    xx = rimuapi.Api()
-    resp = xx.delete("na.com", args.order_oid, output = args)
-    print(resp)
+    with rimuapi.command():
+        args = Args()
+        xx = rimuapi.Api()
+        resp = xx.delete("na.com", args.order_oid, output = args)
+        print(resp)

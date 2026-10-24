@@ -14,6 +14,7 @@ class Args:
 
 
 if __name__ == '__main__':
-    args = Args()
-    api = rimuapi.Api()
-    print(api.disk_images(args.order_oid, output=args))
+    with rimuapi.command():
+        args = Args()
+        api = rimuapi.Api()
+        print(api.disk_images(args.order_oid, output=args))

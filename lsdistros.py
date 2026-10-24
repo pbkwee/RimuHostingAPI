@@ -11,6 +11,7 @@ class Args:
             rimuapi.isDebug = True
 
 if __name__ == '__main__':
-    args = Args()
-    api = rimuapi.Api()
-    print(api.distros(output=args))
+    with rimuapi.command():
+        args = Args()
+        api = rimuapi.Api()
+        print(api.distros(output=args))

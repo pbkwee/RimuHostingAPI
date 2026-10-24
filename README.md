@@ -20,27 +20,42 @@ The dependencies are `requests` and `jsonpath_ng`. The installation provides the
 
 ## Configure access
 
-Get an API key from [the RimuHosting control panel](https://rimuhosting.com/cp/apikeys.jsp).
-Set `RIMUHOSTING_APIKEY` to the key's digits:
+Copy the example settings file into the project directory:
+
+```sh
+cp .rimuhosting.example .rimuhosting
+```
+
+Edit `.rimuhosting` and enter the digits of your
+[API key from the control panel](https://rimuhosting.com/cp/apikeys.jsp).
+The example selects readable human output with progress, automatic colors,
+standard detail, and pretty JSON. It saves runs in `./runlogs` and leaves debug off.
+Uncomment optional settings as needed. The file uses Python syntax.
+Local settings and `runlogs/` are excluded from Git.
+
+You can also export the key:
 
 ```sh
 export RIMUHOSTING_APIKEY='YOUR_API_KEY_DIGITS'
 ```
 
-Alternatively, create `~/.rimuhosting`. This settings file uses Python syntax:
+Settings are read from the first `.rimuhosting` found in the current directory,
+home directory, or `PATH`, in that order. Use `~/.rimuhosting` for shared settings.
+Environment variables override file settings for `RIMUHOSTING_APIKEY`,
+`RIMUHOSTING_BASEURL`, `RIMUHOSTING_OUTPUT`, and `RIMUHOSTING_LOGDIR`.
+Command-line options override the display defaults in the settings file:
 
-```python
-RIMUHOSTING_APIKEY = 'YOUR_API_KEY_DIGITS'
-IS_DEBUG = False
-# Optional overrides:
-# RIMUHOSTING_BASEURL = 'https://rimuhosting.com'
-# RIMUHOSTING_ISVERIFYSSL = True
-```
+| Setting | Example default | Command-line override |
+| --- | --- | --- |
+| `RIMUHOSTING_OUTPUT` | `'human'` | `--output json/flat/raw/human` |
+| `RIMUHOSTING_PROGRESS` | `True` | `--progress` or `--no-progress` |
+| `RIMUHOSTING_COLOR` | `'auto'` | `--color auto/always/never` |
+| `RIMUHOSTING_DETAIL` | `'short'` | `--detail minimal/short/full` |
+| `RIMUHOSTING_PRETTY` | `True` | `--is_pretty` or `--is_ugly` |
 
-The library searches the home directory, then directories in `PATH`, for the
-first `.rimuhosting` file. The environment variable `RIMUHOSTING_APIKEY` takes
-precedence over the settings file. The environment variable `RIMUHOSTING_BASEURL`
-also overrides the settings file. The default base URL is `https://rimuhosting.com`.
+Without settings, existing defaults remain: JSON, no progress, automatic color,
+standard detail, and pretty JSON. `IS_DEBUG = False` keeps diagnostics quiet;
+`--debug` enables them when needed.
 
 ## Commands
 
@@ -267,7 +282,9 @@ These options are available on all Python commands:
 
 | Option | Behavior |
 | --- | --- |
-| `--output json` | Format the selected response as JSON; this is the default |
+| `--output json` | Format the selected response as JSON; the default unless configured otherwise |
+| `--color auto/always/never` | Control colors in human output; defaults to auto |
+| `--output human` | Show a readable summary of the full result |
 | `--output flat` | Write the selected response as `field=value` lines |
 | `--output raw` | Write the original API JSON text; ignore detail and JSONPath selection |
 | `--detail short` | Return the standard fields for the command; this is the default |
@@ -277,7 +294,8 @@ These options are available on all Python commands:
 | `--is_pretty` | Indent JSON output; this is the default |
 | `--is_ugly` | Write compact JSON without indentation |
 | `--debug` | Write request and response metadata to stderr, without request or response bodies |
-| `--progress` | Show live progress on stderr when available; otherwise keep the normal response |
+| `--progress` | Show live progress on stderr when available |
+| `--no-progress` | Disable live progress for this command |
 | `--is_disable_calls` | Raise an error before sending any API request; no preview is printed |
 
 For example, select order IDs:
@@ -285,6 +303,30 @@ For example, select order IDs:
 ```sh
 python3 lsvms.py --detail minimal --jsonpath '$..order_oid' --is_ugly
 ```
+
+Use `--output human` for readable results, including operation messages and useful
+VM, disk-image, and pricing details. The layout adapts to your terminal and remains
+readable without color. Use `--output json` for scripts. Without an output setting,
+JSON remains the default; the example settings choose human output.
+
+Colors follow your terminal theme. Use `--color never` to turn them off or
+`--color always` to force them on. Automatic color respects `NO_COLOR` and
+`TERM=dumb`, and is disabled for redirected output. Saved logs stay plain text.
+
+For example:
+
+```sh
+python3 lsvms.py --output human
+python3 mksnapshot.py --order_oid 123456 --progress --output human
+```
+
+With `--progress --output human`, a progress message can appear on stderr and
+again in the final summary on stdout.
+
+Expected failures display an explanation on stderr and exit with status 1.
+Human output includes available validation details. Use `--debug` for a traceback.
+Failed commands leave stdout empty. Closing a pipe or pager exits quietly.
+Library callers receive exceptions to handle themselves.
 
 HTTP errors include the status and reason. When a handled JSON error includes a
 human-readable API message, the scripts preserve that message for both 4xx and
@@ -326,6 +368,47 @@ refresh disk images and VM status before requesting another backup.
 The read timeout measures inactivity; progress heartbeats can keep a stream open
 longer than one hour.
 
+## Optional run logs
+
+Logging is disabled by default. Set `RIMUHOSTING_LOGDIR` to enable logs for any
+output format:
+
+```sh
+export RIMUHOSTING_LOGDIR='./runlogs'
+python3 lsvms.py --output human
+```
+
+The example `.rimuhosting` settings enable logs in `./runlogs`. Relative paths
+start from the directory where you run the command.
+The environment variable overrides that setting. An explicitly empty environment
+variable disables logging, including a configured settings-file path.
+
+Each CLI run gets a private directory named after the command and UTC time,
+with a unique suffix. All requests from that command share the directory.
+Library calls get one directory per call.
+
+Each directory contains:
+
+| File | Contents |
+| --- | --- |
+| `stdout.txt` | CLI standard output |
+| `stderr.txt` | CLI errors, diagnostics, and progress |
+| `summary.txt` | Readable results, progress, and errors |
+| `meta.json` | Request outcomes, errors, exit code, and timestamps |
+| `001-http.txt` | First request's HTTP status, response headers, and body |
+| `001-response.json` | First request's complete JSON result |
+
+Further requests use `002-`, `003-`, and subsequent numbered files.
+The JSON file remains empty when no JSON result could be decoded.
+Logs exclude request headers, request bodies, authentication, and `Set-Cookie`.
+Complete response bodies can still contain sensitive data. Keep run directories private.
+
+Progress messages are saved as they arrive.
+
+If logging cannot start, the command stops before sending a request.
+If logging fails later, the command warns that logs may be incomplete.
+The operation's result is still reported.
+
 ## Use the library
 
 ```python
@@ -348,23 +431,31 @@ print(api.create_snapshot(123456, label='Before upgrade'))
 print(api.orders())
 ```
 
-The default return value is formatted JSON text. Set `api.detail`, `api.output`,
-and `api.is_pretty` to change the output in the same way as the command-line options.
+The return format follows `RIMUHOSTING_OUTPUT`, or JSON when unset.
+Set `api.detail`, `api.output`, and `api.is_pretty` to change the output
+in the same way as the command-line options.
+For example, `api.output = 'human'` selects readable summaries.
+Set `api.color = 'never'` to disable color.
+Set `api.log_dir` to a directory path to enable logs for subsequent API calls.
+Set `api.log_dir = None` to disable those logs.
 
 ## Check the scripts
 
-Run the offline regression checks from this checkout:
+The `tests/` directory contains offline regression tests for contributors using
+a source checkout. Run every suite with:
 
 ```sh
-python3 test-chattrvm.py && python3 test-rimuapi.py
-python3 test-progress.py
+python3 tests/run.py
 ```
 
-The checks mock HTTP transport and shell commands. They need no API key and do
-not change any servers.
+The tests use synthetic data and mocked operations. They need no API key,
+block network access, and do not change any servers. Run without Python
+optimization so that assertions remain enabled.
+To run one suite, use `python3 tests/test-progress.py`, for example.
 
-`rimuapitests.sh` uses the live API and requires an API key. It lists VMs and,
-when an order ID is supplied, reads that VM's status and information:
+`rimuapitests.sh` is excluded from the offline runner. It uses the live API and
+requires an API key. It lists VMs and, when an order ID is supplied, reads that
+VM's status and information:
 
 ```sh
 bash rimuapitests.sh --order_oid 123456 --details 'minimal short' --outputs 'json flat'

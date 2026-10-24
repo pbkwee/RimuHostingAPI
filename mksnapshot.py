@@ -15,6 +15,7 @@ class Args:
 
 
 if __name__ == '__main__':
-    args = Args()
-    api = rimuapi.Api()
-    print(api.create_snapshot(args.order_oid, label=args.label, output=args))
+    with rimuapi.command():
+        args = Args()
+        api = rimuapi.Api()
+        print(api.create_snapshot(args.order_oid, label=args.label, output=args))

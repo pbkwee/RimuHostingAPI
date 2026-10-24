@@ -27,5 +27,6 @@ class Args(object):
         return
 
 if __name__ == '__main__':
-    args = Args();
-    args.run()
+    with rimuapi.command():
+        args = Args();
+        args.run()

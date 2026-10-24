@@ -20,13 +20,14 @@ class Args(object):
           rimuapi.isDebug = self.debug;
 
 if __name__ == '__main__':
-    args = Args();
-    xx = rimuapi.Api()
-    order_filter_json = {'server_type': 'VPS'}
-    if args.order_oid:
-          order_filter_json["order_oid"] = args.order_oid
-    if args.search:
-          order_filter_json["search"] = args.search
+    with rimuapi.command():
+        args = Args();
+        xx = rimuapi.Api()
+        order_filter_json = {'server_type': 'VPS'}
+        if args.order_oid:
+              order_filter_json["order_oid"] = args.order_oid
+        if args.search:
+              order_filter_json["search"] = args.search
 
-    existing = xx.orders(args.include_inactive, order_filter_json, output = args)
-    print(existing)
+        existing = xx.orders(args.include_inactive, order_filter_json, output = args)
+        print(existing)
