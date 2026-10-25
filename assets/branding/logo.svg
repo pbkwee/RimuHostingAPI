@@ -1,0 +1,10 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title description">
+  <title id="title">RimuHosting API logo</title>
+  <desc id="description">A terminal prompt connects to a server through a two-way arrow. The prompt represents code and commands; the link represents API requests and responses.</desc>
+  <rect x="30" y="180" width="180" height="150" rx="22" fill="none" stroke="#996444" stroke-width="14" />
+  <path d="M70 220L110 254L70 286 M126 286H166" fill="none" stroke="#996444" stroke-width="14" />
+  <path d="M224 254L242 234V246H308V234L326 254L308 274V262H242V274Z" fill="#587200" />
+  <path d="M358 160H462Q480 160 480 178V322Q480 340 462 340H358Q340 340 340 322V178Q340 160 358 160Z M362 176H458Q464 176 464 182V194H356V182Q356 176 362 176Z M362 208H458Q464 208 464 214V246Q464 252 458 252H362Q356 252 356 246V214Q356 208 362 208Z M362 266H458Q464 266 464 272V310Q464 316 458 316H362Q356 316 356 310V272Q356 266 362 266Z M356 340H374V352H356Z M446 340H464V352H446Z" fill="#996444" fill-rule="evenodd" />
+  <g fill="#996444"><circle cx="444" cy="230" r="9" fill="#88AA00" /><circle cx="444" cy="290" r="9" fill="#88AA00" /></g>
+</svg>

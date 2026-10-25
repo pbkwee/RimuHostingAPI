@@ -1,5 +1,7 @@
 # RimuHosting API
 
+![RimuHosting API. Manage your servers from code. Python library and command-line tools.](assets/branding/readme-banner.png)
+
 A Python library and command-line tools for the RimuHosting server management API.
 The tools list VMs and disk images, create saved root-disk backups, quote pricing,
 create or reinstall VMs, change resources, control VM state, cancel VMs, and update reverse DNS.
@@ -525,3 +527,8 @@ bash rimuapitests.sh --order_oid 123456 --details 'minimal short' --outputs 'jso
 The shell runner invokes `python`. Ensure `python` resolves to Python 3, such as
 by activating the virtual environment above. The `--is_disruptive` flag also
 allows the runner to start, stop, and restart the selected VM.
+
+## Branding
+
+See the [branding guide](docs/branding.md) for logo files, colours, usage notes
+and the banner generation prompt.
