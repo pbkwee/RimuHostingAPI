@@ -74,7 +74,7 @@ _IMAGE = (('optional_image_id', 'ID'), ('file_name', 'file'), ('label', 'label')
           ('device', 'device'), ('is_block_attached', 'attached'),
           ('is_listed_in_params_file', 'listed'), ('is_boot_disk', 'boot'),
           ('is_raw_device', 'raw'))
-_MESSAGES = ('setup_messages', 'backup_messages', 'cancel_messages',
+_MESSAGES = ('setup_messages', 'backup_messages', 'rescue_messages', 'cancel_messages',
              'running_state_messages', 'move_messages', 'resource_change_messages')
 
 
@@ -151,12 +151,13 @@ def format_human(response):
     running = _dict(data.get('running_vps_info'))
     add('VM', _vm(data.get('about_order'), running))
     rows('VMs', data.get('about_orders'), _vm)
-    add('Runtime', _fields(running, (('pings_ok', 'ping'), ('is_suspended', 'suspended'),
+    add('Runtime', _fields(running, (('pings_ok', 'ping'), ('is_rescue_boot', 'rescue boot'), ('is_suspended', 'suspended'),
                                     ('deployed_state', 'deployment'), ('vps_uptime_s', 'uptime s'),
                                     ('current_kernel', 'kernel'), ('is_backup_running', 'backup running'),
                                     ('is_backups_enabled', 'backups enabled'),
                                     ('next_backup_time', 'next backup'))))
     add('Last backup', _text(running.get('last_backup_message')))
+    add('Rescue SSH', _fields(data, (('ssh_host', 'host'), ('ssh_port', 'port'))))
     add('Control', _fields(data, (('is_restarted', 'restarted'), ('is_pinging', 'ping'))))
     rows('Disk images', running.get('disk_images'), lambda v: _fields(v, _IMAGE))
     if isinstance(data.get('backup_image'), dict):

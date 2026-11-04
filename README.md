@@ -70,7 +70,7 @@ Replace `123456` with a VM order ID from `lsvms.py`.
 | `lsdistros.py` | List enabled distributions, including promoted and recommended choices |
 | `lsdcs.py` | List data center locations enabled for new shared VPS setups |
 | `lsvms.py` | List VMs and find order IDs |
-| `vmctl.py` | Start, stop, restart, or read VM status and order information |
+| `vmctl.py` | Start, stop, restart, rescue boot, or read VM status and order information |
 | `mksnapshot.py` | Create a saved root-disk backup and wait for the result |
 | `lsdiskimages.py` | List available disk images, including mounted images and backups |
 | `pricing.py` | Quote pricing without creating or reinstalling a VM |
@@ -125,6 +125,37 @@ python3 vmctl.py start --order_oid 123456
 python3 vmctl.py stop --order_oid 123456
 python3 vmctl.py restart --order_oid 123456
 ```
+
+### Rescue boot for repairs
+
+Rescue boot interrupts the VM and starts a separate rescue system on its existing IP.
+The supplied SSH public keys grant root access to that system and its attached disks:
+
+```sh
+python3 vmctl.py rescueboot --order_oid 123456 --ssh_public_key 'ssh-ed25519 AAAA… agent'
+python3 vmctl.py rescueboot --order_oid 123456 --ssh_public_key_file /path/to/agent.pub
+```
+
+Repeat either key option or provide newline-separated keys in one argument.
+Add `--is_add_users_ssh_keys` to include the account's saved SSH keys. The options apply only to `rescueboot`.
+Supplied keys are not saved to the account or the installed system.
+The API generates a temporary rescue password; the client uses SSH keys.
+This requires a server with the rescue-boot API endpoint deployed.
+
+The result contains `ssh_host`, `ssh_port` (22), `rescue_messages` and
+`running_vps_info.is_rescue_boot`. Connect as root using the matching private key.
+Rescue has different SSH host keys from the installed system; verify its identity
+before accepting the connection. Inspect disks and existing mounts before repairs.
+After leaving any chroot and syncing/unmounting filesystems you mounted, return
+to the installed system through the API:
+
+```sh
+python3 vmctl.py restart --order_oid 123456
+```
+
+Use this host-controlled restart rather than relying on `reboot` inside rescue.
+`vmctl.py status` exposes `is_rescue_boot`; status can reuse inventory up to five
+minutes old. A timeout does not cancel rescue boot. Check state before retrying.
 
 ### Create a snapshot and list disk images
 
@@ -481,6 +512,8 @@ api = Api()  # Uses the same environment variables and settings file.
 print(api.orders())
 print(api.create_snapshot(123456, label='Before upgrade'))
 print(api.disk_images(123456))
+print(api.rescue_boot(123456, ssh_public_keys=['ssh-ed25519 AAAA… agent']))
+# Each list entry can contain one key or several newline-separated keys.
 ```
 
 Set `api.progress = True` to enable progress messages on stderr for every API call.

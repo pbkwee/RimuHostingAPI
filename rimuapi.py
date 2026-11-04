@@ -287,7 +287,7 @@ class Api:
     progress = False
     on_progress = None
 
-    simplified_order_json = '$..(pings_ok, running_state, deployed_state, order_description, amt_usd, order_oid, domain_name, primary_ip, human_readable_message, data_center_location_code, data_center_location_name)'
+    simplified_order_json = '$..(is_rescue_boot, pings_ok, running_state, deployed_state, order_description, amt_usd, order_oid, domain_name, primary_ip, human_readable_message, data_center_location_code, data_center_location_name)'
     simplified_disk_image_json = '$..(optional_image_id, file_name, label, size_mb, modified_time, location)'
 
     def __init__(self, key=None):
@@ -655,6 +655,28 @@ class Api:
                                    json_keys=['backup_image', 'removed_disk_images', 'backup_messages',
                                               'running_vps_info', 'human_readable_message'],
                                    jsonpath_query='$..(backup_image, removed_disk_images, backup_messages, human_readable_message)')
+
+    def rescue_boot(self, order_oid, ssh_public_keys=None, is_add_users_ssh_keys=False,
+                    output=None, on_progress=None):
+        """Restart in rescue with temporary SSH keys; restart normally to leave rescue."""
+        # pgb:rescueapi: Keep supplied keys transient and let the server generate the rescue password.
+        if ssh_public_keys is None:
+            ssh_public_keys = []
+        if not isinstance(ssh_public_keys, (list, tuple)) or any(
+                not isinstance(key, str) for key in ssh_public_keys):
+            raise HumanReadableException('ssh_public_keys must be a list of OpenSSH public-key strings.')
+        # 'key-one\n\nkey-two' -> ['key-one', 'key-two']; semantic validation belongs to the server.
+        keys = [line.strip() for key in ssh_public_keys for line in key.splitlines() if line.strip()]
+        if not keys and not is_add_users_ssh_keys:
+            raise HumanReadableException('Rescue boot requires SSH public keys or is_add_users_ssh_keys=True.')
+        request = {'rescue_ssh_public_keys': keys, 'rescue_ssh': True,
+                   'is_add_users_ssh_keys': is_add_users_ssh_keys}
+        return self.__send_request('/r/orders/order-%s-na.com/vps/rescue-boot' % positive_int(order_oid),
+                                   data={'rescue_boot_request': request}, method='POST', output=output,
+                                   json_root='post_rescue_boot_response', on_progress=on_progress,
+                                   json_keys=['rescue_messages', 'running_vps_info', 'ssh_host', 'ssh_port',
+                                              'human_readable_message'],
+                                   jsonpath_query='$..(is_rescue_boot, ssh_host, ssh_port, rescue_messages, human_readable_message)')
 
     def disk_images(self, order_oid, output=None):
         return self.__send_request('/r/orders/order-%s-na.com/vps' % order_oid, output=output,
